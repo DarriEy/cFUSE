@@ -1,5 +1,5 @@
 CMakeFiles/dfuse_core.dir/python/bindings.cpp.o: \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/python/bindings.cpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/python/bindings.cpp \
   /Users/darrieythorsson/compHydro/code/SYMFLUENCE/venv/lib/python3.11/site-packages/pybind11/include/pybind11/pybind11.h \
   /Users/darrieythorsson/compHydro/code/SYMFLUENCE/venv/lib/python3.11/site-packages/pybind11/include/pybind11/detail/class.h \
   /Users/darrieythorsson/compHydro/code/SYMFLUENCE/venv/lib/python3.11/site-packages/pybind11/include/pybind11/attr.h \
@@ -1083,11 +1083,11 @@ CMakeFiles/dfuse_core.dir/python/bindings.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX14.4.sdk/usr/include/c++/v1/__tree \
   /Library/Developer/CommandLineTools/SDKs/MacOSX14.4.sdk/usr/include/c++/v1/set \
   /Library/Developer/CommandLineTools/SDKs/MacOSX14.4.sdk/usr/include/c++/v1/valarray \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/dfuse.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/config.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/state.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/physics.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/solver.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/dfuse.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/config.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/state.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/physics.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/solver.hpp \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/cvode/cvode.h \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/cvode/cvode_ls.h \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/sundials/sundials_direct.h \
@@ -1120,6 +1120,6 @@ CMakeFiles/dfuse_core.dir/python/bindings.cpp.o: \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/sunmatrix/sunmatrix_dense.h \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/sunlinsol/sunlinsol_dense.h \
   /Users/darrieythorsson/compHydro/data/SYMFLUENCE_data/installs/sundials/install/sundials/include/sundials/sundials_dense.h \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/routing.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/enzyme_ad.hpp \
-  /Users/darrieythorsson/compHydro/code/dfuse-v0.2.10/include/dfuse/kernels.hpp
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/routing.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/enzyme_ad.hpp \
+  /Users/darrieythorsson/compHydro/code/dFUSE/include/dfuse/kernels.hpp
