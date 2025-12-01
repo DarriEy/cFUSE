@@ -52,7 +52,7 @@ cp dfuse_core*.so ../python/
 ### 4. Run  Example Optimization
 
 ```bash
-cd python
+cd path/to/dFUSE/python
 python optimize_basin.py
 ```
 ## Command Line Options
