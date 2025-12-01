@@ -35,8 +35,8 @@ from dfuse_netcdf import read_fuse_forcing, parse_file_manager, read_elevation_b
 class OptimizationConfig:
     """Configuration for optimization run"""
     # Data paths
-    basin_id: str = "Klondike_Bonanza_Creek"
-    base_path: str = "/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Klondike_Bonanza_Creek"
+    basin_id: str = "Bow_at_Banff_lumped_era5"
+    base_path: str = "/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5"
     
     # Optimization settings
     n_iterations: int = 200
@@ -105,11 +105,11 @@ PARAM_BOUNDS = {
 
 # Default initial parameters (physically reasonable starting point)
 DEFAULT_INIT_PARAMS = {
-    'S1_max': 100.0, 'S2_max': 1000.0,
-    'f_tens': 0.5, 'f_rchr': 0.5, 'f_base': 0.5,
-    'r1': 0.5, 'ku': 500.0, 'c': 10.5,
-    'alpha': 125.5, 'psi': 3.0, 'kappa': 0.5,
-    'ki': 500.0, 'ks': 50.0, 'n': 5.0,
+    'S1_max': 200.0, 'S2_max': 2000.0,  # Was 100, 1000
+    'ku': 10.0,      # Was 500 - very high!
+    'ki': 10.0,      # Was 500 - very high!
+    'c': 4.0,        # Was 10.5
+    'alpha': 100.0,  # Was 125.5
     'v': 0.125, 'v_A': 0.125, 'v_B': 0.125,
     'Ac_max': 0.5, 'b': 1.5, 'lambda': 7.5,
     'chi': 3.5, 'mu_t': 0.9,
@@ -649,9 +649,9 @@ def main():
     parser = argparse.ArgumentParser(description='Enhanced dFUSE Basin Optimization')
     
     # Data args
-    parser.add_argument('--basin', type=str, default="Klondike_Bonanza_Creek", help='Basin ID')
+    parser.add_argument('--basin', type=str, default="Bow_at_Banff_lumped_era5", help='Basin ID')
     parser.add_argument('--base-path', type=str, 
-                        default="/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Klondike_Bonanza_Creek")
+                        default="/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5")
     
     # Optimization args
     parser.add_argument('--iterations', type=int, default=200, help='Number of iterations')

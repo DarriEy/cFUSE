@@ -410,21 +410,28 @@ def read_elevation_bands(filepath: Union[str, Path]) -> FUSEElevationBands:
     
     if HAS_XARRAY:
         ds = xr.open_dataset(filepath)
+        # Use np.atleast_1d to handle single-band (lumped) basins
+        area_frac = np.atleast_1d(ds['area_frac'].values.squeeze())
+        mean_elev = np.atleast_1d(ds['mean_elev'].values.squeeze())
+        prec_frac = np.atleast_1d(ds['prec_frac'].values.squeeze())
         bands = FUSEElevationBands(
-            n_bands=len(ds['elevation_band']),
-            area_frac=ds['area_frac'].values.squeeze(),
-            mean_elev=ds['mean_elev'].values.squeeze(),
-            prec_frac=ds['prec_frac'].values.squeeze()
+            n_bands=len(area_frac),
+            area_frac=area_frac,
+            mean_elev=mean_elev,
+            prec_frac=prec_frac
         )
         ds.close()
         return bands
     else:
         with nc.Dataset(filepath, 'r') as ds:
+            area_frac = np.atleast_1d(ds.variables['area_frac'][:].squeeze())
+            mean_elev = np.atleast_1d(ds.variables['mean_elev'][:].squeeze())
+            prec_frac = np.atleast_1d(ds.variables['prec_frac'][:].squeeze())
             return FUSEElevationBands(
-                n_bands=len(ds.dimensions['elevation_band']),
-                area_frac=ds.variables['area_frac'][:].squeeze(),
-                mean_elev=ds.variables['mean_elev'][:].squeeze(),
-                prec_frac=ds.variables['prec_frac'][:].squeeze()
+                n_bands=len(area_frac),
+                area_frac=area_frac,
+                mean_elev=mean_elev,
+                prec_frac=prec_frac
             )
 
 
