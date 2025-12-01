@@ -8,9 +8,6 @@ A differentiable implementation of the FUSE hydrological model framework with En
 ## Features
 
 - **Differentiable physics**: Full gradient computation via Enzyme AD
-- **Multiple model structures**: VIC, TOPMODEL, Sacramento, PRMS configurations  
-- **Elevation bands**: Distributed snow and precipitation
-- **Fast optimization**: ~25 iterations/second on CPU
 - **PyTorch integration**: Custom autograd function for gradient-based calibration
 
 ## Quick Start
