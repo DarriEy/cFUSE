@@ -183,9 +183,11 @@ ModelConfig decisions_to_config(const ModelDecisions& dec) {
     if (dec.arch2 == "fixedsiz_2") config.lower_arch = LowerLayerArch::SINGLE_NOEVAP;
     else if (dec.arch2 == "unlimfrc_2" || dec.arch2 == "unlimpow_2") config.lower_arch = LowerLayerArch::SINGLE_EVAP;
     else if (dec.arch2 == "tens2pll_2") config.lower_arch = LowerLayerArch::TENSION_2RESERV;
+    else if (dec.arch2 == "topmdexp_2") config.lower_arch = LowerLayerArch::SINGLE_NOEVAP;  // TOPMODEL uses infinite reservoir
     
     // Baseflow
-    if (dec.arch2 == "unlimfrc_2") config.baseflow = BaseflowType::LINEAR;
+    if (dec.arch2 == "fixedsiz_2") config.baseflow = BaseflowType::LINEAR;  // Fixed size with linear drainage
+    else if (dec.arch2 == "unlimfrc_2") config.baseflow = BaseflowType::LINEAR;
     else if (dec.arch2 == "unlimpow_2") config.baseflow = BaseflowType::NONLINEAR;
     else if (dec.arch2 == "tens2pll_2") config.baseflow = BaseflowType::PARALLEL_LINEAR;
     else if (dec.arch2 == "topmdexp_2") config.baseflow = BaseflowType::TOPMODEL;

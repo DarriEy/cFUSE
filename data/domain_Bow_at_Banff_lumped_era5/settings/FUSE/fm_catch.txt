@@ -1,8 +1,8 @@
 FUSE_FILEMANAGER_V1.5
 ! *** paths
-'/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5/settings/FUSE/'     ! SETNGS_PATH
-'/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5/forcing/FUSE_input/'        ! INPUT_PATH
-'/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5/simulations/run_1/FUSE/'       ! OUTPUT_PATH
+'/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/settings/FUSE/'     ! SETNGS_PATH
+'/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/forcing/FUSE_input/'        ! INPUT_PATH
+'/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/simulations/run_1/FUSE/'       ! OUTPUT_PATH
 ! *** suffic for input files - the files must be in INPUT_PATH
 '_input.nc'                      ! suffix_forcing     = suffix for forcing file to be append to basin_id
 '_elev_bands.nc'                 ! suffix_elev_bands  = suffix for elevation bands file to be append to basin_id
