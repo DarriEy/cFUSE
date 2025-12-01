@@ -3,183 +3,116 @@
 [![CI](https://github.com/DarriEy/dFUSE/actions/workflows/ci.yml/badge.svg)](https://github.com/DarriEy/dFUSE/actions/workflows/ci.yml)
 [![Python Tests](https://github.com/DarriEy/dFUSE/actions/workflows/python-tests.yml/badge.svg)](https://github.com/DarriEy/dFUSE/actions/workflows/python-tests.yml)
 
-**Version 0.3.0** - A differentiable implementation of the FUSE hydrological model framework in C++, with Enzyme automatic differentiation.
-
-> **Note:** dFUSE is in active development.
-
-## Overview
-
-dFUSE implements the modular FUSE (Framework for Understanding Structural Errors) hydrological model with automatic differentiation support via [Enzyme](https://enzyme.mit.edu/). This enables gradient-based parameter optimization using modern deep learning optimizers.
-
-Based on [Clark et al. (2008)](http://dx.doi.org/10.1029/2007WR006735) "Framework for Understanding Structural Errors (FUSE): A modular framework to diagnose differences between hydrological models", Water Resources Research.
+A differentiable implementation of the FUSE hydrological model framework with Enzyme automatic differentiation.
 
 ## Features
 
-- **Modular Architecture**: 7 structural decisions with 2-4 options each (792 model configurations)
-- **Enzyme AD**: Automatic differentiation through the full physics simulation
-- **Elevation Bands**: Multi-band snow modeling with lapse rate corrections
-- **Smooth Physics**: Logistic approximations for discontinuities (Kavetski & Kuczera, 2007)
-- **PyTorch Integration**: Custom autograd function for gradient-based optimization
-- **Unit Hydrograph Routing**: Gamma distribution-based flow routing
+- **Differentiable physics**: Full gradient computation via Enzyme AD
+- **Multiple model structures**: VIC, TOPMODEL, Sacramento, PRMS configurations  
+- **Elevation bands**: Distributed snow and precipitation
+- **Fast optimization**: ~25 iterations/second on CPU
+- **PyTorch integration**: Custom autograd function for gradient-based calibration
 
 ## Quick Start
 
-### Prerequisites
+### 1. Install Dependencies
 
-- Python 3.9+ with NumPy, PyTorch, netCDF4
-- C++17 compiler (for building the native module)
-- LLVM 19 with Enzyme plugin (for gradient support)
-
-### Installation
-
-**Option 1: pip install (Python only)**
 ```bash
-pip install -e .
+# Python dependencies
+pip install numpy torch netCDF4 tqdm matplotlib
+
+# macOS: Install LLVM 19 for Enzyme
+brew install llvm@19
 ```
 
-This installs the Python package. You still need to build the C++ extension separately for gradient computation.
+### 2. Build Enzyme (one-time setup)
 
-**Option 2: Full build with C++ extension**
 ```bash
-# Build C++ module
+git clone https://github.com/EnzymeAD/Enzyme.git
+cd Enzyme && mkdir build && cd build
+cmake ../enzyme -DLLVM_DIR=$(brew --prefix llvm@19)/lib/cmake/llvm
+make -j
+sudo cp Enzyme/ClangEnzyme-19.dylib /opt/homebrew/lib/
+```
+
+### 3. Build dFUSE
+
+```bash
+cd dFUSE
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DDFUSE_BUILD_PYTHON=ON \
+    -DDFUSE_USE_NETCDF=ON \
     -DDFUSE_USE_ENZYME=ON \
-    -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@19/bin/clang++
+    -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@19)/bin/clang++
 make -j
-
-# Copy compiled module to package
-cp dfuse_core*.so ../python/dfuse/
-
-# Install Python package
-cd ..
-pip install -e .
+cp dfuse_core*.so ../python/
 ```
 
-### Running Optimization
-
-**Command line:**
-```bash
-dfuse-optimize --help
-```
-
-**Python API:**
-```python
-from dfuse import FUSEConfig, VIC_CONFIG, PARAM_NAMES
-from dfuse.io import read_fuse_forcing, read_elevation_bands
-import dfuse_core  # C++ extension (must be built separately)
-
-# Load data
-forcing = read_fuse_forcing("forcing.nc")
-bands = read_elevation_bands("bands.nc")
-
-# Run simulation
-result = dfuse_core.run_fuse_elevation_bands(
-    initial_state, forcing, params, 
-    VIC_CONFIG.to_dict(),
-    bands.area_frac, bands.mean_elev, ref_elev
-)
-```
-
-### Comparing with Fortran FUSE
+### 4. Run  Example Optimization
 
 ```bash
-python compare_fortran.py \
-    --forcing /path/to/forcing.nc \
-    --fuse-output /path/to/fuse_output.nc
+cd python
+python optimize_basin.py
 ```
+
+This runs parameter optimization on the included test data (Bow River at Banff, 40 years of ERA5 forcing):
+
+```
+Data: 15341 timesteps, 14976 valid observations (after 365 day spinup)
+
+Starting optimization:
+  Optimizer: adam, LR: 0.1, Schedule: warmup_cosine
+  Loss: nse, Iterations: 200
+  Gradient backend: ENZYME
+
+Iter 200: NSE=0.8205, KGE=0.7892, LR=1.00e-03
+
+Best Parameters:
+  S1_max: 295.17, S2_max: 8150.18, ks: 662.32, ...
+```
+
+## Command Line Options
+
+```bash
+python optimize_basin.py --help
+
+# Examples:
+python optimize_basin.py --iterations 500          # More iterations
+python optimize_basin.py --lr 0.05                 # Lower learning rate
+python optimize_basin.py --loss kge                # Optimize KGE instead of NSE
+python optimize_basin.py --spinup-days 730         # 2-year spinup
+```
+
+## Test Data
+
+The repository includes test data in `data/domain_Bow_at_Banff_lumped_era5/`:
+
+- **Basin**: Bow River at Banff (2210 km²)
+- **Period**: 1980-2020 (40 years daily)
+- **Forcing**: ERA5 reanalysis (precipitation, temperature, PET)
+- **Observations**: Streamflow for validation
+- **Fortran output**: Reference simulation for comparison
 
 ## Project Structure
 
 ```
 dFUSE/
-├── include/dfuse/       # C++ headers
-│   ├── config.hpp       # Model configuration enums
-│   ├── state.hpp        # State and flux structures
-│   ├── physics.hpp      # Physics computations
-│   ├── enzyme_ad.hpp    # Enzyme AD integration
-│   ├── kernels.hpp      # Simulation kernels
-│   ├── solver.hpp       # ODE solvers
-│   ├── routing.hpp      # Flow routing
-│   ├── netcdf_io.hpp    # NetCDF I/O
-│   └── simulation.hpp   # High-level simulation
-├── src/
-│   └── dfuse_cli.cpp    # Command-line interface
+├── data/                    # Test data (Bow at Banff)
+├── include/dfuse/          # C++ headers
 ├── python/
-│   ├── bindings.cpp     # pybind11 bindings
-│   ├── dfuse.py         # Python model definitions
-│   ├── dfuse_netcdf.py  # NetCDF data loading
-│   ├── optimize_basin.py    # Gradient-based optimization
-│   └── compare_fortran.py   # Validation against Fortran FUSE
-├── tests/
-│   └── test_comprehensive.cpp  # Unit tests
-├── examples/
-│   └── single_basin.cpp # Example usage
-└── CMakeLists.txt
+│   ├── optimize_basin.py   # Main optimization script
+│   ├── compare_fortran.py  # Compare with Fortran FUSE
+│   └── dfuse/              # Python package
+├── build/                  # Build output
+└── README.md
 ```
-
-## Command-Line Interface
-
-If built with NetCDF support, dFUSE provides a CLI for running simulations:
-
-```bash
-# Build with NetCDF
-cmake .. -DDFUSE_USE_NETCDF=ON ...
-make
-
-# Run simulation
-./dfuse --forcing forcing.nc --output output.nc --config config.txt
-```
-
-## Model Architecture
-
-### Structural Decisions
-
-| Decision | Options |
-|----------|---------|
-| Upper Layer | Single state, Tension/Free split, Tension cascade |
-| Lower Layer | Single state, Tension/Free split, Split with multiple free states |
-| Surface Runoff | ARNO/VIC, PRMS, TOPMODEL |
-| Percolation | Drainage at field capacity, Gravity-driven, Saturation excess |
-| Evaporation | Root weighting, Sequential |
-| Interflow | Linear, Nonlinear |
-| Baseflow | Linear, Nonlinear |
-
-### Parameters
-
-29 parameters total including bucket capacities, transfer rates, shape parameters, and snow/routing parameters.
-
-## Smooth Physics
-
-All physics computations use smooth approximations to avoid discontinuities that would break gradient computation:
-
-```cpp
-// Logistic smoothing for bucket overflow
-Real logistic_overflow(Real S, Real S_max, Real w) {
-    Real x = (S - S_max - w * 5) / w;
-    return 1.0 / (1.0 + exp(-x));
-}
-```
-
-## References
-
-- Clark, M. P., et al. (2008). Framework for Understanding Structural Errors (FUSE). Water Resources Research, 44(12). [doi:10.1029/2007WR006735](http://dx.doi.org/10.1029/2007WR006735)
-- Kavetski, D., & Kuczera, G. (2007). Model smoothing strategies to remove microscale discontinuities. Water Resources Research, 43(3).
 
 ## License
 
-GNU General Public License v3.0 (same as original FUSE)
-
-## Continuous Integration
-
-The project uses GitHub Actions for CI:
-
-- **CI**: Builds and tests on Ubuntu and macOS (without Enzyme for simplicity)
-- **Python Tests**: Tests the Python package across Python 3.9-3.12
-- **Enzyme Build** (optional): Builds with Enzyme AD on macOS
+GNU General Public License v3.0
 
 ## Acknowledgments
 
-- Original FUSE implementation by Martyn Clark and collaborators at NCAR
-- [Enzyme AD project](https://enzyme.mit.edu/) for automatic differentiation support
+- Original FUSE: Clark et al. (2008), Water Resources Research
+- Enzyme AD: Moses & Churavy (2020), NeurIPS

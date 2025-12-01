@@ -36,7 +36,7 @@ class OptimizationConfig:
     """Configuration for optimization run"""
     # Data paths
     basin_id: str = "Bow_at_Banff_lumped_era5"
-    base_path: str = "/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5"
+    base_path: str = "/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/"
     
     # Optimization settings
     n_iterations: int = 200
@@ -651,7 +651,7 @@ def main():
     # Data args
     parser.add_argument('--basin', type=str, default="Bow_at_Banff_lumped_era5", help='Basin ID')
     parser.add_argument('--base-path', type=str, 
-                        default="/Users/darrieythorsson/compHydro/data/CONFLUENCE_data/domain_Bow_at_Banff_lumped_era5")
+                        default="/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/")
     
     # Optimization args
     parser.add_argument('--iterations', type=int, default=200, help='Number of iterations')
