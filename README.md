@@ -5,6 +5,8 @@
 
 A differentiable implementation of the FUSE hydrological model framework with Enzyme automatic differentiation.
 
+**Note dFUSE is in active development, expect unfinished code**
+
 ## Features
 
 - **Differentiable physics**: Full gradient computation via Enzyme AD
