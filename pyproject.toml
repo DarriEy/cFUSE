@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dfuse"
+version = "0.3.0"
+description = "Differentiable FUSE hydrological model with Enzyme AD"
+readme = "README.md"
+license = {text = "GPL-3.0"}
+authors = [
+    {name = "Darri Eythorsson", email = "darri.eythorsson@ucalgary.ca"}
+]
+keywords = ["hydrology", "automatic-differentiation", "fuse", "enzyme"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Hydrology",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20",
+    "torch>=2.0",
+    "netCDF4>=1.5",
+    "tqdm>=4.0",
+    "matplotlib>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/DarriEy/dFUSE"
+Repository = "https://github.com/DarriEy/dFUSE"
+Issues = "https://github.com/DarriEy/dFUSE/issues"
+
+[project.scripts]
+dfuse-optimize = "dfuse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+dfuse = ["*.so", "*.dylib", "*.pyd"]

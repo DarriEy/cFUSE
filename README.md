@@ -12,7 +12,7 @@ Based on [Clark et al. (2008)](http://dx.doi.org/10.1029/2007WR006735) "Framewor
 
 ## Features
 
-- **Modular Architecture**: 8 structural decisions with 2-4 options each 
+- **Modular Architecture**: 7 structural decisions with 2-4 options each (792 model configurations)
 - **Enzyme AD**: Automatic differentiation through the full physics simulation
 - **Elevation Bands**: Multi-band snow modeling with lapse rate corrections
 - **Smooth Physics**: Logistic approximations for discontinuities (Kavetski & Kuczera, 2007)
@@ -23,19 +23,22 @@ Based on [Clark et al. (2008)](http://dx.doi.org/10.1029/2007WR006735) "Framewor
 
 ### Prerequisites
 
-- C++17 compiler
-- CMake 3.18+
-- Python 3.8+ with NumPy, PyTorch
+- Python 3.9+ with NumPy, PyTorch, netCDF4
+- C++17 compiler (for building the native module)
 - LLVM 19 with Enzyme plugin (for gradient support)
 
-### Building
+### Installation
 
+**Option 1: pip install (Python only)**
 ```bash
-# Clone
-git clone https://github.com/DarriEy/dFUSE.git
-cd dFUSE
+pip install -e .
+```
 
-# Build
+This installs the Python package. You still need to build the C++ extension separately for gradient computation.
+
+**Option 2: Full build with C++ extension**
+```bash
+# Build C++ module
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DDFUSE_BUILD_PYTHON=ON \
@@ -43,20 +46,37 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm@19/bin/clang++
 make -j
 
-# Install Python module
-cp dfuse_core*.so ../python/
+# Copy compiled module to package
+cp dfuse_core*.so ../python/dfuse/
+
+# Install Python package
+cd ..
+pip install -e .
 ```
 
 ### Running Optimization
 
+**Command line:**
 ```bash
-cd python
-python optimize_basin.py \
-    --forcing /path/to/forcing.nc \
-    --streamflow /path/to/obs.nc \
-    --iterations 200 \
-    --optimizer adam \
-    --lr 0.1
+dfuse-optimize --help
+```
+
+**Python API:**
+```python
+from dfuse import FUSEConfig, VIC_CONFIG, PARAM_NAMES
+from dfuse.io import read_fuse_forcing, read_elevation_bands
+import dfuse_core  # C++ extension (must be built separately)
+
+# Load data
+forcing = read_fuse_forcing("forcing.nc")
+bands = read_elevation_bands("bands.nc")
+
+# Run simulation
+result = dfuse_core.run_fuse_elevation_bands(
+    initial_state, forcing, params, 
+    VIC_CONFIG.to_dict(),
+    bands.area_frac, bands.mean_elev, ref_elev
+)
 ```
 
 ### Comparing with Fortran FUSE
