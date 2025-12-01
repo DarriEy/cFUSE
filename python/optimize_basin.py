@@ -654,10 +654,10 @@ def main():
                         default="/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/")
     
     # Optimization args
-    parser.add_argument('--iterations', type=int, default=200, help='Number of iterations')
+    parser.add_argument('--iterations', type=int, default=500, help='Number of iterations')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw', 'sgd'])
     parser.add_argument('--lr', type=float, default=0.1, help='Initial learning rate')
-    parser.add_argument('--lr-schedule', type=str, default='warmup_cosine', 
+    parser.add_argument('--lr-schedule', type=str, default='cosine', 
                         choices=['cosine', 'step', 'exponential', 'warmup_cosine'])
     parser.add_argument('--warmup-steps', type=int, default=10, help='LR warmup steps')
     
@@ -666,7 +666,7 @@ def main():
                         help='Gradient computation backend: enzyme (Euler+AD) or cvodes (BDF+adjoint)')
     
     # Loss args
-    parser.add_argument('--loss', type=str, default='nse', choices=['nse', 'nse_log', 'kge', 'rmse'])
+    parser.add_argument('--loss', type=str, default='kge', choices=['nse', 'nse_log', 'kge', 'rmse'])
     parser.add_argument('--spinup-days', type=int, default=365, help='Spinup days to exclude')
     
     # Early stopping

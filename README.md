@@ -61,9 +61,9 @@ python optimize_basin.py
 python optimize_basin.py --help
 
 # Examples:
-python optimize_basin.py --iterations 500          # More iterations
+python optimize_basin.py --iterations 700          # More iterations
 python optimize_basin.py --lr 0.05                 # Lower learning rate
-python optimize_basin.py --loss kge                # Optimize KGE instead of NSE
+python optimize_basin.py --loss nse                # Optimize NSE instead of KGE
 python optimize_basin.py --spinup-days 730         # 2-year spinup
 ```
 
@@ -72,7 +72,6 @@ python optimize_basin.py --spinup-days 730         # 2-year spinup
 The repository includes test data in `data/domain_Bow_at_Banff_lumped_era5/`:
 
 - **Basin**: Bow River at Banff (2210 km²)
-- **Period**: 1980-2020 (40 years daily)
 - **Forcing**: ERA5 reanalysis (precipitation, temperature, PET)
 - **Observations**: Streamflow for validation
 - **Fortran output**: Reference simulation for comparison
