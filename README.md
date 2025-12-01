@@ -1,6 +1,8 @@
 # dFUSE: Differentiable Framework for Understanding Structural Errors
 
-**Version 0.2.0** - A GPU-native, differentiable implementation of the FUSE hydrological model framework in C++, with Sundials and Enzyme.
+**Version 0.2.10** - A GPU-native, differentiable implementation of the FUSE hydrological model framework in C++, with Sundials and Enzyme. 
+
+**Note dFUSE is in active development, expect to find broken or unfinished code**
 
 Based on [Clark et al. (2008) "Framework for Understanding Structural Errors (FUSE): A modular framework to diagnose differences between hydrological models"](http://dx.doi.org/10.1029/2007WR006735), Water Resources Research.
 
