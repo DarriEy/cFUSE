@@ -14,10 +14,16 @@
  #include "dfuse/solver.hpp"
  #include "dfuse/routing.hpp"
  
+ // CVODES adjoint sensitivity (optional - requires CVODES, not just CVODE)
+ #ifdef DFUSE_USE_CVODES
+ #include "dfuse/cvodes_adjoint.hpp"
+ #endif
+ 
  #include <vector>
  #include <cstring>
  #include <algorithm>
  #include <stdexcept>
+ #include <iostream>
  #include <cmath>
  
  #ifdef DFUSE_USE_CUDA
@@ -568,6 +574,7 @@
      return result;
  }
  
+#ifdef DFUSE_USE_ENZYME
  // Diagnostic function: compute numerical gradient for comparison
  py::tuple compute_gradient_numerical_debug(
      py::array_t<Real> initial_state,
@@ -663,7 +670,183 @@
      // Also return base result to check for NaN in forward pass
      return py::make_tuple(num_grad, base_result);
  }
+#endif // DFUSE_USE_ENZYME
  
+ // ========================================================================
+ // CVODES ADJOINT SENSITIVITY (Alternative to Enzyme)
+ // ========================================================================
+ 
+ #ifdef DFUSE_USE_CVODES
+
+ /**
+  * @brief Compute gradients using CVODES adjoint sensitivity analysis
+  * 
+  * This uses SUNDIALS CVODES implicit BDF solver with adjoint sensitivity
+  * for gradient computation. Alternative to Enzyme AD with explicit Euler.
+  * 
+  * Advantages:
+  * - Implicit solver handles stiff dynamics properly
+  * - Adaptive timestepping
+  * - Mathematically rigorous adjoint through implicit solve
+  */
+ py::array_t<Real> compute_gradient_cvodes_adjoint(
+     py::array_t<Real> initial_state,
+     py::array_t<Real> forcing,
+     py::array_t<Real> params,
+     py::array_t<Real> grad_runoff,
+     py::dict config_dict,
+     py::array_t<Real> area_frac,
+     py::array_t<Real> mean_elev,
+     Real ref_elev,
+     Real route_shape,
+     Real route_delay,
+     Real dt
+ ) {
+     std::cerr << "[CVODES] Entering compute_gradient_cvodes_adjoint" << std::endl << std::flush;
+     
+     using namespace cvodes_adjoint;
+     
+     ModelConfig config = config_from_dict(config_dict);
+     int config_arr[10];
+     config_to_int_array(config, config_arr);
+     
+     auto forcing_buf = forcing.unchecked<2>();
+     auto params_buf = params.unchecked<1>();
+     auto grad_buf = grad_runoff.unchecked<1>();
+     auto state_buf = initial_state.unchecked<1>();
+     auto area_buf = area_frac.unchecked<1>();
+     auto elev_buf = mean_elev.unchecked<1>();
+     
+     int n_bands = area_buf.size();
+     int n_timesteps = forcing_buf.shape(0);
+     int n_params = params_buf.size();
+     
+     std::cerr << "[CVODES] n_bands=" << n_bands << " n_timesteps=" << n_timesteps << " n_params=" << n_params << std::endl << std::flush;
+     
+     // Prepare forcing flat array
+     std::vector<Real> forcing_flat(n_timesteps * 3);
+     for(int t = 0; t < n_timesteps; ++t) {
+         forcing_flat[t*3+0] = forcing_buf(t,0);
+         forcing_flat[t*3+1] = forcing_buf(t,1);
+         forcing_flat[t*3+2] = forcing_buf(t,2);
+     }
+     
+     std::cerr << "[CVODES] Forcing prepared" << std::endl << std::flush;
+     
+     // Prepare grad output
+     std::vector<Real> grad_out_flat(n_timesteps);
+     for(int t = 0; t < n_timesteps; ++t) {
+         grad_out_flat[t] = grad_buf(t);
+     }
+     
+     std::cerr << "[CVODES] Grad output prepared" << std::endl << std::flush;
+     
+     // Prepare parameters
+     Real param_arr[cvodes_adjoint::NUM_PARAMS] = {0};
+     for(int i = 0; i < n_params && i < cvodes_adjoint::NUM_PARAMS; ++i) {
+         param_arr[i] = params_buf(i);
+     }
+     
+     std::cerr << "[CVODES] Parameters prepared" << std::endl << std::flush;
+     
+     // Prepare initial state
+     int n_states = cvodes_adjoint::NUM_SOIL_STATES + n_bands;
+     std::vector<Real> state_arr(cvodes_adjoint::TOTAL_STATES, 0.0);
+     for(int i = 0; i < state_buf.size() && i < cvodes_adjoint::TOTAL_STATES; ++i) {
+         state_arr[i] = state_buf(i);
+     }
+     
+     std::cerr << "[CVODES] Initial state prepared, n_states=" << n_states << std::endl << std::flush;
+     
+     // Generate unit hydrograph
+     std::vector<Real> uh;
+     routing::generate_unit_hydrograph(route_shape, route_delay, dt, uh);
+     
+     std::cerr << "[CVODES] UH generated, length=" << uh.size() << std::endl << std::flush;
+     
+     // Setup user data structure
+     AdjointUserData user_data;
+     user_data.forcing_flat = forcing_flat.data();
+     user_data.n_timesteps = n_timesteps;
+     user_data.n_bands = n_bands;
+     user_data.ref_elev = ref_elev;
+     user_data.n_states = n_states;
+     user_data.grad_output = grad_out_flat.data();
+     user_data.uh_weights = uh;
+     user_data.runoff_history.resize(n_timesteps, 0.0);
+     
+     // Copy parameters
+     for(int i = 0; i < cvodes_adjoint::NUM_PARAMS; ++i) {
+         user_data.params[i] = param_arr[i];
+     }
+     
+     // Copy config
+     for(int i = 0; i < 10; ++i) {
+         user_data.config_arr[i] = config_arr[i];
+     }
+     
+     // Copy band properties - fix the layout (area_frac, mean_elev pairs)
+     for(int b = 0; b < n_bands; ++b) {
+         user_data.band_props[b * 2] = area_buf(b);
+         user_data.band_props[b * 2 + 1] = elev_buf(b);
+     }
+     
+     std::cerr << "[CVODES] User data prepared" << std::endl << std::flush;
+     
+     // Run CVODES adjoint solver
+     CVODESAdjointSolver solver;
+     std::cerr << "[CVODES] Solver created, calling compute_gradients..." << std::endl << std::flush;
+     
+     std::vector<Real> param_gradients;
+     std::vector<Real> runoff_out;
+     
+     try {
+         solver.compute_gradients(
+             state_arr.data(),
+             n_states,
+             n_timesteps,
+             user_data,
+             param_gradients,
+             runoff_out
+         );
+         std::cerr << "[CVODES] compute_gradients returned successfully" << std::endl << std::flush;
+     } catch (const std::exception& e) {
+         std::cerr << "[CVODES] Exception: " << e.what() << std::endl << std::flush;
+         throw std::runtime_error(std::string("CVODES adjoint failed: ") + e.what());
+     }
+     
+     // Return gradient array
+     auto result = py::array_t<Real>(n_params);
+     auto res_buf = result.mutable_unchecked<1>();
+     for(int i = 0; i < n_params && i < static_cast<int>(param_gradients.size()); ++i) {
+         res_buf(i) = param_gradients[i];
+     }
+     
+     std::cerr << "[CVODES] Returning gradient array" << std::endl << std::flush;
+     return result;
+ }
+
+ /**
+  * @brief Run forward pass using CVODES BDF solver
+  */
+ py::tuple run_fuse_cvodes(
+     py::array_t<Real> initial_state,
+     py::array_t<Real> forcing,
+     py::array_t<Real> params,
+     py::dict config_dict,
+     py::array_t<Real> area_frac,
+     py::array_t<Real> mean_elev,
+     Real ref_elev,
+     Real dt = 1.0
+ ) {
+     throw std::runtime_error(
+         "run_fuse_cvodes not yet implemented. "
+         "Use run_fuse_elevation_bands for forward pass."
+     );
+ }
+
+ #endif // DFUSE_USE_CVODES
+
  // ========================================================================
  // LEGACY
  // ========================================================================
@@ -731,12 +914,41 @@
      // New Gradient Function
      m.def("compute_gradient_adjoint_bands", &compute_gradient_adjoint_bands);
      
+#ifdef DFUSE_USE_ENZYME
      // Debug: Numerical gradient for comparison
      m.def("compute_gradient_numerical_debug", &compute_gradient_numerical_debug,
          py::arg("initial_state"), py::arg("forcing"), py::arg("params"),
          py::arg("grad_runoff"), py::arg("config"), py::arg("area_frac"),
          py::arg("mean_elev"), py::arg("ref_elev"), py::arg("route_shape"),
          py::arg("route_delay"), py::arg("dt"), py::arg("eps")=1e-4f);
+#endif
+     
+     // CVODES Adjoint Sensitivity (alternative to Enzyme)
+     #ifdef DFUSE_USE_CVODES
+     m.def("compute_gradient_cvodes_adjoint", &compute_gradient_cvodes_adjoint,
+         py::arg("initial_state"), py::arg("forcing"), py::arg("params"),
+         py::arg("grad_runoff"), py::arg("config"), py::arg("area_frac"),
+         py::arg("mean_elev"), py::arg("ref_elev"), py::arg("route_shape"),
+         py::arg("route_delay"), py::arg("dt"),
+         R"doc(
+         Compute gradients using CVODES adjoint sensitivity analysis.
+         
+         This uses SUNDIALS CVODES implicit BDF solver with adjoint sensitivity.
+         Alternative to compute_gradient_adjoint_bands (Enzyme + Euler).
+         
+         Advantages:
+         - Implicit solver handles stiff dynamics properly
+         - Adaptive timestepping for accuracy
+         - Mathematically rigorous adjoint through implicit solve
+         
+         Parameters: Same as compute_gradient_adjoint_bands
+         Returns: Parameter gradients [NUM_PARAMS]
+         )doc");
+     
+     m.attr("HAS_CVODES") = true;
+     #else
+     m.attr("HAS_CVODES") = false;
+     #endif
      
      // Legacy/Utility
      m.def("run_fuse_forward_with_trajectory", &run_fuse_forward_with_trajectory, 

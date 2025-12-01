@@ -1,2 +1,0 @@
-# dFUSE
-differentiable FUSE

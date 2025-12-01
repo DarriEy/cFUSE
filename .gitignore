@@ -1,1 +1,64 @@
+# Build directories
 build/
+cmake-build-*/
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dylib
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+._*
+
+# Generated files
+*.png
+*.jpg
+*.jpeg
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Test binaries (not source files)
+/test_*
+!/tests/test_*.cpp
+
+# Example binaries (not source files)
+/example_*
+!/examples/*.cpp
+
+# Python module (should be built, not committed)
+python/dfuse_core*.so
+python/CMakeCache.txt
+python/CMakeFiles/
+python/Makefile
+python/cmake_install.cmake
+python/dfuse-config-version.cmake
+
+# Optimization results
+python/optimization_results/

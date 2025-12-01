@@ -211,7 +211,7 @@ if(DFUSE_USE_SUNDIALS)
         set(SUNDIALS_DIR ${SUNDIALS_ROOT}/lib/cmake/sundials CACHE PATH "SUNDIALS CMake config" FORCE)
         # Clear system paths to avoid finding Homebrew version
         set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
-        find_package(SUNDIALS QUIET COMPONENTS cvode PATHS ${SUNDIALS_ROOT} NO_DEFAULT_PATH)
+        find_package(SUNDIALS QUIET COMPONENTS cvode cvodes PATHS ${SUNDIALS_ROOT} NO_DEFAULT_PATH)
         set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH ON)
     else()
         # No custom path - try system but warn about MPI
@@ -226,12 +226,48 @@ if(DFUSE_USE_SUNDIALS)
                 )
             endif()
         endif()
-        find_package(SUNDIALS QUIET COMPONENTS cvode)
+        find_package(SUNDIALS QUIET COMPONENTS cvode cvodes)
     endif()
     
     if(SUNDIALS_FOUND)
         message(STATUS "Found SUNDIALS: ${SUNDIALS_DIR}")
         message(STATUS "SUNDIALS version: ${SUNDIALS_VERSION}")
+        
+        # Debug: List available SUNDIALS targets
+        get_property(_sundials_targets DIRECTORY PROPERTY IMPORTED_TARGETS)
+        message(STATUS "Available SUNDIALS targets: ${_sundials_targets}")
+        
+        # Check for CVODES - try multiple possible target names
+        set(SUNDIALS_CVODES_FOUND FALSE)
+        if(TARGET SUNDIALS::cvodes)
+            message(STATUS "Found CVODES target: SUNDIALS::cvodes")
+            set(SUNDIALS_CVODES_FOUND TRUE)
+            set(SUNDIALS_CVODES_TARGET SUNDIALS::cvodes)
+        elseif(TARGET SUNDIALS::sundials_cvodes)
+            message(STATUS "Found CVODES target: SUNDIALS::sundials_cvodes")
+            set(SUNDIALS_CVODES_FOUND TRUE)
+            set(SUNDIALS_CVODES_TARGET SUNDIALS::sundials_cvodes)
+        else()
+            # Manual check - look for the library file
+            find_library(SUNDIALS_CVODES_LIB 
+                NAMES sundials_cvodes
+                HINTS ${SUNDIALS_ROOT}/lib
+                NO_DEFAULT_PATH
+            )
+            if(SUNDIALS_CVODES_LIB)
+                message(STATUS "Found CVODES library manually: ${SUNDIALS_CVODES_LIB}")
+                # Create an imported target for cvodes
+                add_library(SUNDIALS::cvodes_manual UNKNOWN IMPORTED)
+                set_target_properties(SUNDIALS::cvodes_manual PROPERTIES
+                    IMPORTED_LOCATION "${SUNDIALS_CVODES_LIB}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${SUNDIALS_ROOT}/include"
+                )
+                set(SUNDIALS_CVODES_FOUND TRUE)
+                set(SUNDIALS_CVODES_TARGET SUNDIALS::cvodes_manual)
+            else()
+                message(STATUS "CVODES not found - adjoint sensitivity will use Enzyme only")
+            endif()
+        endif()
     else()
         # Manual fallback: look for headers and libraries directly
         message(STATUS "SUNDIALS CMake config not found, trying manual detection...")
@@ -253,8 +289,35 @@ if(DFUSE_USE_SUNDIALS)
                 $ENV{HOME}/sundials/lib
         )
         
+        # CVODES - for adjoint sensitivity analysis
+        find_library(SUNDIALS_CVODES_LIB 
+            NAMES sundials_cvodes
+            HINTS
+                ${SUNDIALS_ROOT}/lib
+                /opt/homebrew/lib
+                /usr/local/lib
+                $ENV{HOME}/sundials/lib
+        )
+        
         find_library(SUNDIALS_NVECSERIAL_LIB 
             NAMES sundials_nvecserial
+            HINTS
+                ${SUNDIALS_ROOT}/lib
+                /opt/homebrew/lib
+                /usr/local/lib
+        )
+        
+        # SUNLinsol and SUNMatrix for linear solvers
+        find_library(SUNDIALS_SUNLINSOL_DENSE_LIB 
+            NAMES sundials_sunlinsoldense
+            HINTS
+                ${SUNDIALS_ROOT}/lib
+                /opt/homebrew/lib
+                /usr/local/lib
+        )
+        
+        find_library(SUNDIALS_SUNMATRIX_DENSE_LIB 
+            NAMES sundials_sunmatrixdense
             HINTS
                 ${SUNDIALS_ROOT}/lib
                 /opt/homebrew/lib
@@ -283,9 +346,41 @@ if(DFUSE_USE_SUNDIALS)
                 if(SUNDIALS_NVECSERIAL_LIB)
                     target_link_libraries(SUNDIALS::cvode INTERFACE ${SUNDIALS_NVECSERIAL_LIB})
                 endif()
+                if(SUNDIALS_SUNLINSOL_DENSE_LIB)
+                    target_link_libraries(SUNDIALS::cvode INTERFACE ${SUNDIALS_SUNLINSOL_DENSE_LIB})
+                endif()
+                if(SUNDIALS_SUNMATRIX_DENSE_LIB)
+                    target_link_libraries(SUNDIALS::cvode INTERFACE ${SUNDIALS_SUNMATRIX_DENSE_LIB})
+                endif()
                 if(SUNDIALS_CORE_LIB)
                     target_link_libraries(SUNDIALS::cvode INTERFACE ${SUNDIALS_CORE_LIB})
                 endif()
+            endif()
+            
+            # Create CVODES target for adjoint sensitivity
+            if(SUNDIALS_CVODES_LIB AND NOT TARGET SUNDIALS::cvodes)
+                add_library(SUNDIALS::cvodes UNKNOWN IMPORTED)
+                set_target_properties(SUNDIALS::cvodes PROPERTIES
+                    IMPORTED_LOCATION "${SUNDIALS_CVODES_LIB}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${SUNDIALS_INCLUDE_DIR}"
+                )
+                if(SUNDIALS_NVECSERIAL_LIB)
+                    target_link_libraries(SUNDIALS::cvodes INTERFACE ${SUNDIALS_NVECSERIAL_LIB})
+                endif()
+                if(SUNDIALS_SUNLINSOL_DENSE_LIB)
+                    target_link_libraries(SUNDIALS::cvodes INTERFACE ${SUNDIALS_SUNLINSOL_DENSE_LIB})
+                endif()
+                if(SUNDIALS_SUNMATRIX_DENSE_LIB)
+                    target_link_libraries(SUNDIALS::cvodes INTERFACE ${SUNDIALS_SUNMATRIX_DENSE_LIB})
+                endif()
+                if(SUNDIALS_CORE_LIB)
+                    target_link_libraries(SUNDIALS::cvodes INTERFACE ${SUNDIALS_CORE_LIB})
+                endif()
+                message(STATUS "Found CVODES for adjoint sensitivity: ${SUNDIALS_CVODES_LIB}")
+                set(SUNDIALS_CVODES_FOUND TRUE)
+            else()
+                message(STATUS "CVODES not found - adjoint sensitivity will be disabled")
+                set(SUNDIALS_CVODES_FOUND FALSE)
             endif()
         endif()
     endif()
@@ -401,6 +496,14 @@ endif()
 if(DFUSE_USE_SUNDIALS)
     target_compile_definitions(dfuse INTERFACE DFUSE_USE_SUNDIALS)
     target_link_libraries(dfuse INTERFACE SUNDIALS::cvode)
+    
+    # Link CVODES for adjoint sensitivity if available
+    if(SUNDIALS_CVODES_FOUND AND SUNDIALS_CVODES_TARGET)
+        message(STATUS "Linking CVODES: ${SUNDIALS_CVODES_TARGET}")
+        target_compile_definitions(dfuse INTERFACE DFUSE_USE_CVODES)
+        target_link_libraries(dfuse INTERFACE ${SUNDIALS_CVODES_TARGET})
+    endif()
+    
     # SUNDIALS on some systems (Homebrew) requires MPI headers
     if(MPI_FOUND)
         target_include_directories(dfuse INTERFACE ${MPI_CXX_INCLUDE_DIRS})
@@ -458,27 +561,10 @@ endif()
 if(DFUSE_BUILD_TESTS)
     enable_testing()
     
-    # CPU test
-    add_executable(test_cpu tests/test_cpu.cpp)
-    target_link_libraries(test_cpu PRIVATE dfuse)
-    add_test(NAME test_cpu COMMAND test_cpu)
-    
-    # Fortran validation test
-    add_executable(test_fortran_validation tests/test_fortran_validation.cpp)
-    target_link_libraries(test_fortran_validation PRIVATE dfuse)
-    add_test(NAME test_fortran_validation COMMAND test_fortran_validation)
-    
-    # Comprehensive test (includes SUNDIALS/Enzyme when available)
+    # Comprehensive test (includes all validation)
     add_executable(test_comprehensive tests/test_comprehensive.cpp)
     target_link_libraries(test_comprehensive PRIVATE dfuse)
     add_test(NAME test_comprehensive COMMAND test_comprehensive)
-    
-    # CUDA test
-    if(DFUSE_USE_CUDA)
-        add_executable(test_cuda tests/test_cuda.cu)
-        target_link_libraries(test_cuda PRIVATE dfuse)
-        add_test(NAME test_cuda COMMAND test_cuda)
-    endif()
 endif()
 
 # ============================================================================
@@ -489,31 +575,6 @@ if(DFUSE_BUILD_EXAMPLES)
     # Single basin example
     add_executable(example_single examples/single_basin.cpp)
     target_link_libraries(example_single PRIVATE dfuse)
-    
-    # Multi-basin GPU example
-    if(DFUSE_USE_CUDA)
-        add_executable(example_multi_gpu examples/multi_basin_gpu.cu)
-        target_link_libraries(example_multi_gpu PRIVATE dfuse)
-    endif()
-endif()
-
-# ============================================================================
-# CLI EXECUTABLE
-# ============================================================================
-
-# Build CLI if NetCDF C++ is available
-if(DFUSE_USE_NETCDF AND NETCDF_CXX_FOUND)
-    add_executable(dfuse_exe src/dfuse_cli.cpp)
-    target_link_libraries(dfuse_exe PRIVATE dfuse)
-    set_target_properties(dfuse_exe PROPERTIES OUTPUT_NAME "dfuse")
-    
-    # Install CLI
-    install(TARGETS dfuse_exe
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    )
-    message(STATUS "Building CLI: dfuse")
-elseif(DFUSE_USE_NETCDF)
-    message(STATUS "CLI not built: requires netcdf-cxx4 library")
 endif()
 
 # ============================================================================
@@ -544,7 +605,7 @@ install(EXPORT dfuse-targets
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/dfuse-config-version.cmake"
-    VERSION 0.2.0
+    VERSION 0.3.0
     COMPATIBILITY SameMajorVersion
 )
 
@@ -559,7 +620,7 @@ install(FILES
 
 message(STATUS "")
 message(STATUS "dFUSE Configuration:")
-message(STATUS "  Version:        0.2.0")
+message(STATUS "  Version:        0.3.0")
 message(STATUS "  Precision:      ${DFUSE_USE_DOUBLE}")
 message(STATUS "  CUDA:           ${DFUSE_USE_CUDA}")
 message(STATUS "  Enzyme AD:      ${DFUSE_USE_ENZYME}")
