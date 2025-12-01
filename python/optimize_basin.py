@@ -7,7 +7,7 @@ Features:
 - Early stopping with patience
 - Gradient clipping
 - Parameter monitoring and logging
-- Multiple optimizer options (Adam, AdamW, SGD with momentum)
+- Multiple optimizer options (Adam, AdamW, SGD with momentum, L-BFGS)
 - Checkpoint saving/loading
 - Multi-objective loss options (NSE, KGE, RMSE)
 """
@@ -26,6 +26,18 @@ import argparse
 from dfuse import FUSEConfig, VIC_CONFIG
 from dfuse_netcdf import read_fuse_forcing, parse_file_manager, read_elevation_bands
 
+# =============================================================================
+# PATH RESOLUTION
+# =============================================================================
+
+# Get the directory where this script resides (dFUSE/python)
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Get the repository root (dFUSE/)
+REPO_ROOT = SCRIPT_DIR.parent
+
+# Define the default data path relative to the repo root
+DEFAULT_DATA_PATH = REPO_ROOT / "data" / "domain_Bow_at_Banff_lumped_era5"
 
 # =============================================================================
 # CONFIGURATION
@@ -36,11 +48,11 @@ class OptimizationConfig:
     """Configuration for optimization run"""
     # Data paths
     basin_id: str = "Bow_at_Banff_lumped_era5"
-    base_path: str = "/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/"
+    base_path: str = str(DEFAULT_DATA_PATH)
     
     # Optimization settings
     n_iterations: int = 200
-    optimizer: str = "adam"  # adam, adamw, sgd
+    optimizer: str = "adam"  # adam, adamw, sgd, lbfgs
     lr_initial: float = 0.1
     lr_min: float = 0.001
     lr_schedule: str = "cosine"  # cosine, step, exponential, warmup_cosine
@@ -74,6 +86,11 @@ class OptimizationConfig:
     
     # Routing
     route_shape: float = 2.5
+    
+    # L-BFGS specific settings
+    lbfgs_max_iter: int = 20  # max iterations per step (line search evals)
+    lbfgs_history_size: int = 10  # number of past updates to store
+    lbfgs_line_search: str = "strong_wolfe"  # strong_wolfe or None
 
 
 # =============================================================================
@@ -192,6 +209,10 @@ def inverse_sigmoid(val: float, low: float, high: float) -> float:
 
 def get_lr_scheduler(optimizer, config: OptimizationConfig):
     """Create learning rate scheduler"""
+    # L-BFGS typically doesn't use LR schedulers in the same way
+    if config.optimizer == "lbfgs":
+        return None
+        
     if config.lr_schedule == "cosine":
         return torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=config.n_iterations, eta_min=config.lr_min
@@ -298,7 +319,7 @@ class CppFUSEFunction(torch.autograd.Function):
         forcing_np = forcing.detach().numpy().astype(np.float32)
         
         # Select gradient backend
-        if ctx.gradient_backend == "cvodes" and hasattr(dfuse_core, 'compute_gradient_cvodes_adjoint'):
+        if ctx.gradient_backend == "cvods" and hasattr(dfuse_core, 'compute_gradient_cvodes_adjoint'):
             # Use CVODES adjoint sensitivity
             grad_params = dfuse_core.compute_gradient_cvodes_adjoint(
                 full_state, forcing_np, params_np, grad_np,
@@ -424,10 +445,24 @@ def run_optimization(config: OptimizationConfig):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr_initial, weight_decay=config.weight_decay)
     elif config.optimizer == "sgd":
         optimizer = torch.optim.SGD(model.parameters(), lr=config.lr_initial, momentum=0.9, weight_decay=config.weight_decay)
+    elif config.optimizer == "lbfgs":
+        # Without line search, L-BFGS needs a much smaller learning rate
+        lbfgs_lr = config.lr_initial
+        if config.lbfgs_line_search == "none" and config.lr_initial > 0.2:
+            lbfgs_lr = 0.1
+            print(f"  Note: Reducing L-BFGS LR from {config.lr_initial} to {lbfgs_lr} (no line search)")
+        
+        optimizer = torch.optim.LBFGS(
+            model.parameters(),
+            lr=lbfgs_lr,
+            max_iter=config.lbfgs_max_iter,
+            history_size=config.lbfgs_history_size,
+            line_search_fn=config.lbfgs_line_search if config.lbfgs_line_search != "none" else None
+        )
     else:
         raise ValueError(f"Unknown optimizer: {config.optimizer}")
     
-    # Create LR scheduler
+    # Create LR scheduler (not used for L-BFGS)
     scheduler = get_lr_scheduler(optimizer, config)
     
     # Early stopping
@@ -447,56 +482,203 @@ def run_optimization(config: OptimizationConfig):
     print(f"  Optimizer: {config.optimizer}, LR: {config.lr_initial}, Schedule: {config.lr_schedule}")
     print(f"  Loss: {config.loss_type}, Iterations: {config.n_iterations}")
     print(f"  Gradient backend: {config.gradient_backend.upper()}")
+    if config.optimizer == "lbfgs":
+        print(f"  L-BFGS settings: max_iter={config.lbfgs_max_iter}, history={config.lbfgs_history_size}, line_search={config.lbfgs_line_search}")
     print(f"  Early stopping: {config.early_stopping} (patience={config.patience})")
     print()
     
     pbar = tqdm(range(config.n_iterations), desc="Optimizing")
     
+    # For L-BFGS, we need a closure
+    is_lbfgs = config.optimizer == "lbfgs"
+    lbfgs_consecutive_failures = 0
+    max_lbfgs_failures = 5  # Reset optimizer after this many consecutive failures
+    
     for i in pbar:
-        optimizer.zero_grad()
-        
-        # Forward pass
-        q_sim = model(f_tensor)
-        
-        # Compute loss
-        loss = loss_fn(q_sim, obs_tensor, mask)
-        
-        # Backward pass
-        loss.backward()
-        
-        # Check for NaN gradients
-        if torch.isnan(model.raw_params.grad).any():
-            tqdm.write(f"Iter {i}: NaN gradient detected, skipping step")
-            optimizer.zero_grad()
+        # Check for NaN parameters (indicates corrupted optimizer state)
+        if torch.isnan(model.raw_params).any() or torch.isinf(model.raw_params).any():
+            tqdm.write(f"Iter {i}: NaN/Inf in parameters detected, resetting to best known values")
+            if best_params is not None:
+                # Reset to best known parameters
+                with torch.no_grad():
+                    for j, name in enumerate(PARAM_NAMES):
+                        val = best_params[name]
+                        low, high = model.param_bounds[j]
+                        model.raw_params[j] = inverse_sigmoid(val, low, high)
+            else:
+                # Reset to initial parameters
+                with torch.no_grad():
+                    for j, name in enumerate(PARAM_NAMES):
+                        val = DEFAULT_INIT_PARAMS.get(name, sum(PARAM_BOUNDS[name]) / 2)
+                        low, high = model.param_bounds[j]
+                        model.raw_params[j] = inverse_sigmoid(val, low, high)
+            
+            # Reset optimizer
+            if is_lbfgs:
+                reset_lr = 0.1 if config.lbfgs_line_search == "none" else config.lr_initial
+                optimizer = torch.optim.LBFGS(
+                    model.parameters(), lr=reset_lr,
+                    max_iter=config.lbfgs_max_iter, history_size=config.lbfgs_history_size,
+                    line_search_fn=config.lbfgs_line_search if config.lbfgs_line_search != "none" else None
+                )
             continue
         
-        # Gradient clipping
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm)
+        # Variables to track within closure for L-BFGS
+        current_loss = None
+        current_q_sim = None
+        grad_norm_value = 0.0
         
-        # Optimizer step
-        optimizer.step()
-        
-        # LR scheduler step
-        if scheduler is not None:
-            scheduler.step()
+        if is_lbfgs:
+            # L-BFGS requires a closure that computes the loss and gradients
+            # Errors can occur inside the closure during line search, so we handle them there
+            closure_error = [False]  # Use list to allow modification in nested function
+            
+            def closure():
+                nonlocal current_loss, current_q_sim, grad_norm_value
+                try:
+                    optimizer.zero_grad()
+                    q_sim = model(f_tensor)
+                    
+                    # Check for NaN/Inf in simulation output
+                    if torch.isnan(q_sim).any() or torch.isinf(q_sim).any():
+                        closure_error[0] = True
+                        # Return a high loss to signal bad parameters
+                        return torch.tensor(1e6, requires_grad=True)
+                    
+                    loss = loss_fn(q_sim, obs_tensor, mask)
+                    
+                    # Check for NaN loss
+                    if torch.isnan(loss) or torch.isinf(loss):
+                        closure_error[0] = True
+                        return torch.tensor(1e6, requires_grad=True)
+                    
+                    loss.backward()
+                    
+                    # Check for NaN gradients
+                    if model.raw_params.grad is None or torch.isnan(model.raw_params.grad).any():
+                        closure_error[0] = True
+                        if model.raw_params.grad is not None:
+                            model.raw_params.grad = torch.zeros_like(model.raw_params.grad)
+                        return loss
+                    
+                    # Gradient clipping
+                    grad_norm_value = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm).item()
+                    
+                    current_loss = loss
+                    current_q_sim = q_sim.detach()
+                    return loss
+                    
+                except Exception as e:
+                    closure_error[0] = True
+                    tqdm.write(f"  Closure error: {e}")
+                    return torch.tensor(1e6, requires_grad=True)
+            
+            # L-BFGS step (may call closure multiple times)
+            try:
+                optimizer.step(closure)
+            except (RuntimeError, IndexError) as e:
+                closure_error[0] = True
+                tqdm.write(f"Iter {i}: L-BFGS step failed ({type(e).__name__})")
+            
+            # Handle any errors that occurred
+            if closure_error[0]:
+                lbfgs_consecutive_failures += 1
+                
+                # Fall back to a simple gradient descent step
+                # First evaluate with gradients enabled
+                optimizer.zero_grad()
+                q_sim_fallback = model(f_tensor)
+                if not (torch.isnan(q_sim_fallback).any() or torch.isinf(q_sim_fallback).any()):
+                    loss_fallback = loss_fn(q_sim_fallback, obs_tensor, mask)
+                    if not (torch.isnan(loss_fallback) or torch.isinf(loss_fallback)):
+                        loss_fallback.backward()
+                        if model.raw_params.grad is not None and not torch.isnan(model.raw_params.grad).any():
+                            # Take a small gradient step
+                            with torch.no_grad():
+                                model.raw_params -= 0.01 * model.raw_params.grad
+                
+                # Reset optimizer if too many consecutive failures
+                if lbfgs_consecutive_failures >= max_lbfgs_failures:
+                    tqdm.write(f"  Resetting L-BFGS optimizer after {max_lbfgs_failures} consecutive failures")
+                    if config.lbfgs_line_search == "strong_wolfe":
+                        tqdm.write(f"  Tip: Try --lbfgs-line-search none --lr 0.1 for more stability")
+                    
+                    # Use reduced LR for reset if no line search
+                    reset_lr = config.lr_initial
+                    if config.lbfgs_line_search == "none" and config.lr_initial > 0.2:
+                        reset_lr = 0.1
+                    
+                    optimizer = torch.optim.LBFGS(
+                        model.parameters(),
+                        lr=reset_lr,
+                        max_iter=config.lbfgs_max_iter,
+                        history_size=config.lbfgs_history_size,
+                        line_search_fn=config.lbfgs_line_search if config.lbfgs_line_search != "none" else None
+                    )
+                    lbfgs_consecutive_failures = 0
+                continue
+            else:
+                lbfgs_consecutive_failures = 0  # Reset on success
+            
+            loss = current_loss
+            q_sim = current_q_sim
+            grad_norm = grad_norm_value
+            
+        else:
+            # Standard optimizer flow (Adam, AdamW, SGD)
+            optimizer.zero_grad()
+            
+            # Forward pass
+            q_sim = model(f_tensor)
+            
+            # Compute loss
+            loss = loss_fn(q_sim, obs_tensor, mask)
+            
+            # Backward pass
+            loss.backward()
+            
+            # Check for NaN gradients
+            if torch.isnan(model.raw_params.grad).any():
+                tqdm.write(f"Iter {i}: NaN gradient detected, skipping step")
+                optimizer.zero_grad()
+                continue
+            
+            # Gradient clipping
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip_norm)
+            
+            # Optimizer step
+            optimizer.step()
+            
+            # LR scheduler step
+            if scheduler is not None:
+                scheduler.step()
         
         # Compute metrics for logging
         with torch.no_grad():
-            nse_loss = compute_nse(q_sim, obs_tensor, mask)
-            nse = 1 - nse_loss.item()
-            kge_loss = compute_kge(q_sim, obs_tensor, mask)
-            kge = 1 - kge_loss.item()
+            # Re-run forward if needed (for L-BFGS, q_sim might be stale after step)
+            if is_lbfgs:
+                q_sim = model(f_tensor)
+            
+            # Check for invalid simulation
+            if torch.isnan(q_sim).any() or torch.isinf(q_sim).any():
+                nse = float('nan')
+                kge = float('nan')
+            else:
+                nse_loss = compute_nse(q_sim, obs_tensor, mask)
+                nse = 1 - nse_loss.item() if not torch.isnan(nse_loss) else float('nan')
+                kge_loss = compute_kge(q_sim, obs_tensor, mask)
+                kge = 1 - kge_loss.item() if not torch.isnan(kge_loss) else float('nan')
         
         # Track history
         current_lr = optimizer.param_groups[0]['lr']
-        history['loss'].append(loss.item())
+        history['loss'].append(loss.item() if hasattr(loss, 'item') else float(loss))
         history['nse'].append(nse)
         history['kge'].append(kge)
         history['lr'].append(current_lr)
-        history['grad_norm'].append(grad_norm.item())
+        history['grad_norm'].append(float(grad_norm) if not isinstance(grad_norm, float) else grad_norm)
         
-        # Track best
-        if nse > history['best_nse']:
+        # Track best (only for valid scores)
+        if not np.isnan(nse) and nse > history['best_nse']:
             history['best_nse'] = nse
             history['best_iter'] = i
             best_params = model.get_params_dict()
@@ -511,7 +693,8 @@ def run_optimization(config: OptimizationConfig):
         
         # Logging
         if i > 0 and i % config.log_interval == 0:
-            tqdm.write(f"Iter {i}: NSE={nse:.4f}, KGE={kge:.4f}, LR={current_lr:.2e}, GradNorm={grad_norm:.2f}")
+            grad_norm_str = f"{grad_norm:.2f}" if isinstance(grad_norm, float) else f"{grad_norm.item():.2f}"
+            tqdm.write(f"Iter {i}: NSE={nse:.4f}, KGE={kge:.4f}, LR={current_lr:.2e}, GradNorm={grad_norm_str}")
         
         # Checkpointing
         if i > 0 and i % config.checkpoint_interval == 0:
@@ -524,8 +707,8 @@ def run_optimization(config: OptimizationConfig):
             }
             torch.save(checkpoint, output_dir / f"checkpoint_{i}.pt")
         
-        # Early stopping
-        if early_stopper is not None:
+        # Early stopping (skip if NaN)
+        if early_stopper is not None and not np.isnan(nse):
             if early_stopper(-nse):  # Negative because we want to maximize
                 tqdm.write(f"Early stopping triggered at iteration {i}")
                 break
@@ -651,11 +834,12 @@ def main():
     # Data args
     parser.add_argument('--basin', type=str, default="Bow_at_Banff_lumped_era5", help='Basin ID')
     parser.add_argument('--base-path', type=str, 
-                        default="/Users/darrieythorsson/compHydro/code/dFUSE/data/domain_Bow_at_Banff_lumped_era5/")
+                        default=str(DEFAULT_DATA_PATH),
+                        help=f'Path to basin data (default: relative to repo root)')
     
     # Optimization args
     parser.add_argument('--iterations', type=int, default=500, help='Number of iterations')
-    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw', 'sgd'])
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw', 'sgd', 'lbfgs'])
     parser.add_argument('--lr', type=float, default=0.1, help='Initial learning rate')
     parser.add_argument('--lr-schedule', type=str, default='cosine', 
                         choices=['cosine', 'step', 'exponential', 'warmup_cosine'])
@@ -672,6 +856,15 @@ def main():
     # Early stopping
     parser.add_argument('--no-early-stopping', action='store_true', help='Disable early stopping')
     parser.add_argument('--patience', type=int, default=30, help='Early stopping patience')
+    
+    # L-BFGS specific args
+    parser.add_argument('--lbfgs-max-iter', type=int, default=20, 
+                        help='L-BFGS max iterations per step (line search evaluations)')
+    parser.add_argument('--lbfgs-history', type=int, default=10,
+                        help='L-BFGS history size (number of past updates to store)')
+    parser.add_argument('--lbfgs-line-search', type=str, default='strong_wolfe',
+                        choices=['strong_wolfe', 'none'],
+                        help='L-BFGS line search function (use "none" if strong_wolfe fails)')
     
     # Other
     parser.add_argument('--grad-clip', type=float, default=10.0, help='Gradient clipping norm')
@@ -694,7 +887,10 @@ def main():
         early_stopping=not args.no_early_stopping,
         patience=args.patience,
         grad_clip_norm=args.grad_clip,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        lbfgs_max_iter=args.lbfgs_max_iter,
+        lbfgs_history_size=args.lbfgs_history,
+        lbfgs_line_search=args.lbfgs_line_search
     )
     
     # Run optimization

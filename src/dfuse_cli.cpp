@@ -196,8 +196,10 @@ ModelConfig decisions_to_config(const ModelDecisions& dec) {
     else if (dec.qsurf == "tmdl_param") config.surface_runoff = SurfaceRunoffType::LZ_GAMMA;
     
     // Percolation
-    if (dec.qperc == "perc_f2sat") config.percolation = PercolationType::TOTAL_STORAGE;
-    else if (dec.qperc == "perc_w2sat") config.percolation = PercolationType::FREE_STORAGE;
+    // perc_f2sat = "field capacity to saturation" = FREE storage only
+    // perc_w2sat = "wilting point to saturation" = TOTAL storage
+    if (dec.qperc == "perc_f2sat") config.percolation = PercolationType::FREE_STORAGE;
+    else if (dec.qperc == "perc_w2sat") config.percolation = PercolationType::TOTAL_STORAGE;
     else if (dec.qperc == "perc_lower") config.percolation = PercolationType::LOWER_DEMAND;
     
     // Evaporation
@@ -542,11 +544,46 @@ int main(int argc, char* argv[]) {
         std::cout << "  Precip: " << precip_mean << " mm/day (mean)\n";
         std::cout << "  Temp: " << temp_mean << " °C (mean)\n";
         
-        // Initialize state
+        // Initialize state - must set sub-states appropriate to the architecture
+        // Use fracstate0 = 0.25 to match Fortran FUSE default initialization
+        constexpr Real fracstate0 = 0.25;
+        
         State state;
-        state.S1 = params.S1_max * 0.5;
-        state.S2 = params.S2_max * 0.5;
         state.SWE = 0.0;
+        
+        // Upper layer initialization based on architecture
+        switch (config.upper_arch) {
+            case UpperLayerArch::SINGLE_STATE:
+                state.S1 = params.S1_max * fracstate0;
+                break;
+            case UpperLayerArch::TENSION_FREE:
+                // Split between tension and free based on f_tens
+                state.S1_T = params.S1_T_max * fracstate0;
+                state.S1_F = params.S1_F_max * fracstate0;
+                break;
+            case UpperLayerArch::TENSION2_FREE:
+                state.S1_TA = params.S1_TA_max * fracstate0;
+                state.S1_TB = params.S1_TB_max * fracstate0;
+                state.S1_F = params.S1_F_max * fracstate0;
+                break;
+        }
+        
+        // Lower layer initialization based on architecture
+        switch (config.lower_arch) {
+            case LowerLayerArch::SINGLE_NOEVAP:
+            case LowerLayerArch::SINGLE_EVAP:
+                state.S2 = params.S2_max * fracstate0;
+                break;
+            case LowerLayerArch::TENSION_2RESERV:
+                // Split between tension and two free reservoirs
+                state.S2_T = params.S2_T_max * fracstate0;
+                state.S2_FA = params.S2_FA_max * fracstate0;
+                state.S2_FB = params.S2_FB_max * fracstate0;
+                break;
+        }
+        
+        // Sync derived states
+        state.sync_derived(config);
         
         // Run model
         std::cout << "\nRunning dFUSE...\n";
