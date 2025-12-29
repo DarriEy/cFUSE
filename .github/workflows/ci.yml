@@ -30,7 +30,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install numpy torch pybind11 pytest tqdm matplotlib
+        pip install numpy torch pybind11 pytest tqdm matplotlib netCDF4
 
     - name: Install system dependencies (Ubuntu)
       if: runner.os == 'Linux'
@@ -74,6 +74,17 @@ jobs:
         python -c "import cfuse_core; print('C++ module loaded successfully')"
         python -c "from cfuse.config import VIC_CONFIG; print('Config:', VIC_CONFIG)"
 
+    - name: Run example optimization (smoke)
+      run: |
+        curl -L -o /tmp/cfuse-example-data.tar.gz https://github.com/DarriEy/dFUSE/releases/download/v0.4.1/cfuse-example-data-v0.4.1.tar.gz
+        mkdir -p data
+        tar -xzf /tmp/cfuse-example-data.tar.gz -C data
+        cd python
+        MPLBACKEND=Agg MPLCONFIGDIR=/tmp/cfuse-mpl python optimize_basin.py \
+          --iterations 1 \
+          --gradient-backend enzyme \
+          --output-dir /tmp/cfuse-smoke
+
   # Optional: Build with Enzyme on macOS (requires LLVM)
   build-with-enzyme:
     runs-on: macos-latest
@@ -90,7 +101,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install numpy torch pybind11 pytest tqdm matplotlib
+        pip install numpy torch pybind11 pytest tqdm matplotlib netCDF4
         brew install cmake netcdf netcdf-cxx llvm@19
 
     - name: Build Enzyme from source
