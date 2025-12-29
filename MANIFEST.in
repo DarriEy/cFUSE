@@ -1,0 +1,14 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CMakeLists.txt
+include setup.py
+include pyproject.toml
+recursive-include include *.hpp *.h
+recursive-include src *.cpp *.c
+recursive-include python *.cpp *.py
+recursive-include examples *.cpp
+recursive-include tests *.cpp *.py
+global-exclude *.pyc *.pyo *.o *.obj *.so *.dylib *.dll
+global-exclude __pycache__
+global-exclude *.egg-info

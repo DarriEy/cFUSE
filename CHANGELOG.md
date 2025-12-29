@@ -8,3 +8,5 @@ All notable changes to this project will be documented in this file.
 - Update the Python optimization workflow to use batch APIs and routed gradients.
 - Add a Python batch smoke test to the CMake test suite.
 - Add `route_runoff` binding in `dfuse_core`.
+- Normalize Python package layout (`dfuse.netcdf`, `dfuse.torch`, legacy model module).
+- Add CMake-based Python build (`setup.py`), `MANIFEST.in`, and a build-dist workflow.

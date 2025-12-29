@@ -24,7 +24,7 @@ import json
 import argparse
 
 from dfuse import FUSEConfig, VIC_CONFIG
-from dfuse_netcdf import read_fuse_forcing, parse_file_manager, read_elevation_bands
+from dfuse.netcdf import read_fuse_forcing, parse_file_manager, read_elevation_bands
 
 # =============================================================================
 # PATH RESOLUTION

@@ -639,7 +639,7 @@ class FUSERunner:
             states: State trajectories if return_states=True
         """
         # Import here to avoid circular imports
-        from dfuse import FUSE, FUSEConfig, get_default_constrained_params
+        from dfuse.legacy import FUSE, FUSEConfig, get_default_constrained_params
         
         # Load forcing
         forcing_data = self.load_forcing(basin_id)
@@ -840,7 +840,7 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 3:
-        print("Usage: python dfuse_netcdf.py <file_manager.txt> <basin_id> [fortran_exe]")
+        print("Usage: python -m dfuse.netcdf <file_manager.txt> <basin_id> [fortran_exe]")
         sys.exit(1)
     
     fm_path = sys.argv[1]
