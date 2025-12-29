@@ -36,8 +36,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # Get the repository root (cFUSE/)
 REPO_ROOT = SCRIPT_DIR.parent
 
-# Define the default data path relative to the repo root
+# Define the default data path relative to the repo root, with a cwd fallback
 DEFAULT_DATA_PATH = REPO_ROOT / "data" / "domain_Bow_at_Banff_lumped_era5"
+if not DEFAULT_DATA_PATH.exists():
+    DEFAULT_DATA_PATH = Path.cwd() / "data" / "domain_Bow_at_Banff_lumped_era5"
 
 # =============================================================================
 # CONFIGURATION
@@ -281,8 +283,9 @@ class CppFUSEFunction(torch.autograd.Function):
         
         # Run Forward (single HRU via batch API)
         initial_states = state_np[None, :]
+        forcing_batch = forcing_np[:, None, :]
         _, runoff = cfuse_core.run_fuse_batch(
-            initial_states, forcing_np, params_np, config_dict, 1.0
+            initial_states, forcing_batch, params_np, config_dict, 1.0
         )
         runoff = runoff[:, 0]
         
@@ -398,8 +401,12 @@ def run_optimization(config: OptimizationConfig):
     # Load data
     fm_path = Path(config.base_path) / "settings/FUSE/fm_catch.txt"
     fm = parse_file_manager(fm_path)
-    forcing = read_fuse_forcing(Path(fm['input_path']) / f"{config.basin_id}{fm['suffix_forcing']}")
-    elev_bands = read_elevation_bands(Path(fm['input_path']) / f"{config.basin_id}{fm['suffix_elev_bands']}")
+    input_path = Path(fm['input_path'])
+    if not input_path.exists():
+        input_path = Path(config.base_path) / "forcing" / "FUSE_input"
+        print(f"WARNING: Using local input path override: {input_path}")
+    forcing = read_fuse_forcing(input_path / f"{config.basin_id}{fm['suffix_forcing']}")
+    elev_bands = read_elevation_bands(input_path / f"{config.basin_id}{fm['suffix_elev_bands']}")
     
     f_tensor = forcing.to_tensor()
     obs_tensor = torch.tensor(forcing.q_obs, dtype=torch.float32)

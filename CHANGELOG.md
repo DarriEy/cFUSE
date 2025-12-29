@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2024-12-28
+- Fix optimize CLI import for packaged installs.
+- Rebase example data paths when release file manager uses absolute paths.
+- Pass 3D forcing arrays to batch API for stability.
+- Package `optimize_basin` as a top-level module for `cfuse-optimize`.
+
 ## [0.4.0] - 2024-12-28
 - Rename project/package to cFUSE (cfuse/cfuse_core).
 - Switch to MIT license and update metadata.

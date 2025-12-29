@@ -642,7 +642,7 @@ install(EXPORT cfuse-targets
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cfuse-config-version.cmake"
-    VERSION 0.4.0
+    VERSION 0.4.1
     COMPATIBILITY SameMajorVersion
 )
 
@@ -657,7 +657,7 @@ install(FILES
 
 message(STATUS "")
 message(STATUS "cFUSE Configuration:")
-message(STATUS "  Version:        0.4.0")
+message(STATUS "  Version:        0.4.1")
 message(STATUS "  Precision:      ${DFUSE_USE_DOUBLE}")
 message(STATUS "  CUDA:           ${DFUSE_USE_CUDA}")
 message(STATUS "  Enzyme AD:      ${DFUSE_USE_ENZYME}")

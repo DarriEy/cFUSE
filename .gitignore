@@ -15,6 +15,7 @@ __pycache__/
 *.egg-info/
 .eggs/
 dist/
+.venv*/
 
 # IDE files
 .idea/

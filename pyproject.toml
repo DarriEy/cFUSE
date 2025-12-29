@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cfuse"
-version = "0.4.0"
+version = "0.4.1"
 description = "Differentiable FUSE hydrological model with Enzyme AD"
 readme = "README.md"
 license = "MIT"
@@ -50,6 +50,7 @@ cfuse-optimize = "cfuse.cli:main"
 [tool.setuptools]
 include-package-data = true
 package-dir = {"" = "python"}
+py-modules = ["optimize_basin"]
 zip-safe = false
 
 [tool.setuptools.packages.find]
