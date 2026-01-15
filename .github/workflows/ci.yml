@@ -77,8 +77,7 @@ jobs:
     - name: Run example optimization (smoke)
       run: |
         curl -L -o /tmp/cfuse-example-data.tar.gz https://github.com/DarriEy/dFUSE/releases/download/v0.4.1/cfuse-example-data-v0.4.1.tar.gz
-        mkdir -p data
-        tar -xzf /tmp/cfuse-example-data.tar.gz -C data
+        tar -xzf /tmp/cfuse-example-data.tar.gz
         cd python
         MPLBACKEND=Agg MPLCONFIGDIR=/tmp/cfuse-mpl python optimize_basin.py \
           --iterations 1 \
