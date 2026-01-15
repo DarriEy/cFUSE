@@ -27,10 +27,37 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake libnetcdf-dev libnetcdf-c++4-dev
+
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install numpy torch tqdm matplotlib netCDF4 pytest
+        pip install numpy torch tqdm matplotlib netCDF4 pytest pybind11
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DDFUSE_BUILD_TESTS=OFF \
+          -DDFUSE_BUILD_PYTHON=ON \
+          -DDFUSE_USE_ENZYME=OFF \
+          -DDFUSE_USE_SUNDIALS=OFF \
+          -DDFUSE_USE_NETCDF=ON
+
+    - name: Build C++ extension
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Copy compiled extension
+      run: |
+        cd build
+        cp cfuse_core*.so ../python/
 
     - name: Install package
       run: |
