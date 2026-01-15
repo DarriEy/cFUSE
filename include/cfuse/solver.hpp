@@ -351,57 +351,76 @@
          Flux& flux_out
      ) {
          const int n_states = get_num_states(model_config);
-         
+
+         // Handle snow module once at the beginning (not in Newton iteration)
+         // This maintains temporal consistency with explicit Euler
+         Real throughfall;
+         if (model_config.enable_snow) {
+             Real rain, melt, SWE_new;
+             physics::compute_snow(forcing.precip, forcing.temp, state.SWE, params,
+                                   rain, melt, SWE_new);
+             state.SWE = SWE_new;
+             throughfall = rain + melt;
+             flux_out.rain = rain;
+             flux_out.melt = melt;
+         } else {
+             throughfall = forcing.precip;
+             flux_out.rain = forcing.precip;
+             flux_out.melt = Real(0);
+         }
+         flux_out.throughfall = throughfall;
+
          // Current state as vector
          Real y[MAX_TOTAL_STATES];
          Real y_new[MAX_TOTAL_STATES];
          Real f[MAX_TOTAL_STATES];
          Real J[MAX_TOTAL_STATES * MAX_TOTAL_STATES];
          Real delta[MAX_TOTAL_STATES];
-         
+
          state.to_array(y, model_config);
-         
+
          // Initial guess: explicit Euler
-         compute_rhs(y, forcing, params, model_config, f);
+         compute_rhs(y, throughfall, forcing, params, model_config, f);
          for (int i = 0; i < n_states; ++i) {
              y_new[i] = y[i] + dt * f[i];
          }
-         
+
          // Newton iteration
          for (int iter = 0; iter < config_.max_newton_iter; ++iter) {
              // Compute residual: G(y_new) = y_new - y - dt*f(y_new)
-             compute_rhs(y_new, forcing, params, model_config, f);
-             
+             compute_rhs(y_new, throughfall, forcing, params, model_config, f);
+
              Real residual_norm = 0;
              for (int i = 0; i < n_states; ++i) {
                  delta[i] = y_new[i] - y[i] - dt * f[i];  // G(y_new)
                  residual_norm += delta[i] * delta[i];
              }
              residual_norm = std::sqrt(residual_norm);
-             
+
              if (residual_norm < config_.newton_tol) break;
-             
+
              // Compute Jacobian: dG/dy = I - dt * df/dy
-             compute_jacobian(y_new, forcing, params, model_config, dt, J);
-             
+             compute_jacobian(y_new, throughfall, forcing, params, model_config, dt, J);
+
              // Solve J * correction = -G (simple Gaussian elimination)
              solve_linear_system(J, delta, n_states);
-             
+
              // Update: y_new = y_new - correction
              for (int i = 0; i < n_states; ++i) {
                  y_new[i] -= delta[i];
                  y_new[i] = std::max(Real(0), y_new[i]);  // Non-negativity
              }
          }
-         
+
          // Update state
          state.from_array(y_new, model_config);
-         
-         // Compute final fluxes
-         ExplicitEulerSolver euler_solver;
-         // Use explicit solver's compute_fluxes via the flux computation
+
+         // Compute final fluxes using pre-computed throughfall
          Flux flux;
-         compute_final_flux(state, forcing, params, model_config, flux);
+         compute_final_flux_with_throughfall(state, throughfall, forcing, params, model_config, flux);
+         flux.rain = flux_out.rain;
+         flux.melt = flux_out.melt;
+         flux.throughfall = throughfall;
          flux_out = flux;
      }
      
@@ -426,6 +445,7 @@
      
      void compute_rhs(
          const Real* y,
+         Real throughfall,
          const Forcing& forcing,
          const Parameters& params,
          const ModelConfig& config,
@@ -434,17 +454,18 @@
          // Reconstruct state from array
          State state;
          state.from_array(y, config);
-         
-         // Compute fluxes
+
+         // Compute fluxes using pre-computed throughfall (snow already handled)
          Flux flux;
-         compute_final_flux(state, forcing, params, config, flux);
-         
+         compute_final_flux_with_throughfall(state, throughfall, forcing, params, config, flux);
+
          // Compute derivatives
          physics::compute_derivatives(state, flux, params, config, f);
      }
      
      void compute_jacobian(
          const Real* y,
+         Real throughfall,
          const Forcing& forcing,
          const Parameters& params,
          const ModelConfig& config,
@@ -453,20 +474,20 @@
      ) {
          const int n = get_num_states(config);
          const Real eps = 1e-7;
-         
+
          Real f0[MAX_TOTAL_STATES];
          Real f1[MAX_TOTAL_STATES];
          Real y_pert[MAX_TOTAL_STATES];
-         
-         compute_rhs(y, forcing, params, config, f0);
-         
+
+         compute_rhs(y, throughfall, forcing, params, config, f0);
+
          for (int j = 0; j < n; ++j) {
              // Perturb state j
              for (int i = 0; i < n; ++i) y_pert[i] = y[i];
              Real h = eps * std::max(std::abs(y[j]), Real(1));
              y_pert[j] += h;
-             
-             compute_rhs(y_pert, forcing, params, config, f1);
+
+             compute_rhs(y_pert, throughfall, forcing, params, config, f1);
              
              // dG/dy_j = I_j - dt * df/dy_j
              for (int i = 0; i < n; ++i) {
@@ -515,7 +536,7 @@
              b[i] /= A[i * n + i];
          }
      }
-     
+
      void compute_final_flux(
          State state,
          const Forcing& forcing,
@@ -529,21 +550,55 @@
             Real excess = state.S1 - params.S1_T_max;
             state.S1_F = (excess > Real(0)) ? excess : Real(0);
         }
-         
+
          Real rain, melt, SWE_new;
          compute_snow(forcing.precip, forcing.temp, state.SWE, params,
                       rain, melt, SWE_new);
          flux.rain = rain;
          flux.melt = melt;
          flux.throughfall = rain + melt;
-         
+
          compute_surface_runoff(flux.throughfall, state, params, config,
                                 flux.Ac, flux.qsx);
          compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
          flux.q12 = compute_percolation(state, params, config, flux.qb);
          flux.qif = compute_interflow(state, params, config);
          compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
-         
+
+         Real infiltration = flux.throughfall - flux.qsx;
+         compute_overflow(infiltration, flux.q12, state, params, config,
+                          flux.qurof, flux.qutof, flux.qufof,
+                          flux.qstof, flux.qsfof, flux.qsfofa, flux.qsfofb);
+         flux.compute_totals();
+     }
+
+     // Version of compute_final_flux that uses pre-computed throughfall
+     // (for implicit Euler where snow is computed once at the start of timestep)
+     void compute_final_flux_with_throughfall(
+         State state,
+         Real throughfall,
+         const Forcing& forcing,
+         const Parameters& params,
+         const ModelConfig& config,
+         Flux& flux
+     ) {
+        using namespace physics;
+
+        if (config.upper_arch == UpperLayerArch::SINGLE_STATE) {
+            Real excess = state.S1 - params.S1_T_max;
+            state.S1_F = (excess > Real(0)) ? excess : Real(0);
+        }
+
+        // Use pre-computed throughfall (rain + melt from snow module computed at start of timestep)
+        flux.throughfall = throughfall;
+
+         compute_surface_runoff(flux.throughfall, state, params, config,
+                                flux.Ac, flux.qsx);
+         compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
+         flux.q12 = compute_percolation(state, params, config, flux.qb);
+         flux.qif = compute_interflow(state, params, config);
+         compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
+
          Real infiltration = flux.throughfall - flux.qsx;
          compute_overflow(infiltration, flux.q12, state, params, config,
                           flux.qurof, flux.qutof, flux.qufof,
