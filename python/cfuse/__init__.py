@@ -98,41 +98,35 @@ def register():
     or can be called manually to register cFUSE components with
     the SYMFLUENCE model and optimizer registries.
     """
+    from symfluence.core.registries import R
     from symfluence.core.registry import model_manifest
-    from symfluence.models.registry import ModelRegistry
-    from symfluence.optimization.registry import OptimizerRegistry
-    from symfluence.cli.services import BuildInstructionsRegistry
 
     from .sfconfig import CFUSEConfigAdapter
     from .extractor import CFUSEResultExtractor
     from .runner import CFUSERunner
     from .preprocessor import CFUSEPreProcessor
     from .postprocessor import CFUSEPostprocessor, CFUSERoutedPostprocessor
-    from .build_instructions import get_cfuse_build_instructions
     from .calibration.optimizer import CFUSEModelOptimizer
     from .calibration.worker import CFUSEWorker
     from .calibration.parameter_manager import CFUSEParameterManager
     from .calibration.targets import CFUSEStreamflowTarget
 
-    # Register via model_manifest (config adapter + result extractor)
+    # Register all standard components via the unified manifest. Build
+    # instructions are resolved lazily from the build_instructions module.
     model_manifest(
         "CFUSE",
         config_adapter=CFUSEConfigAdapter,
         result_extractor=CFUSEResultExtractor,
         build_instructions_module="cfuse.build_instructions",
+        runner=CFUSERunner,
+        runner_method='run_cfuse',
+        preprocessor=CFUSEPreProcessor,
+        postprocessor=CFUSEPostprocessor,
+        worker=CFUSEWorker,
+        optimizer=CFUSEModelOptimizer,
+        parameter_manager=CFUSEParameterManager,
     )
 
-    # Register runner, preprocessor, postprocessors
-    ModelRegistry.register_runner('CFUSE', method_name='run_cfuse')(CFUSERunner)
-    ModelRegistry.register_preprocessor('CFUSE')(CFUSEPreProcessor)
-    ModelRegistry.register_postprocessor('CFUSE')(CFUSEPostprocessor)
-    ModelRegistry.register_postprocessor('CFUSE_routed')(CFUSERoutedPostprocessor)
-
-    # Register build instructions
-    BuildInstructionsRegistry.register('cfuse')(get_cfuse_build_instructions)
-
-    # Register calibration components
-    OptimizerRegistry.register_optimizer('CFUSE')(CFUSEModelOptimizer)
-    OptimizerRegistry.register_worker('CFUSE')(CFUSEWorker)
-    OptimizerRegistry.register_parameter_manager('CFUSE')(CFUSEParameterManager)
-    OptimizerRegistry.register_calibration_target('CFUSE', 'streamflow')(CFUSEStreamflowTarget)
+    # Components without a dedicated manifest parameter.
+    R.postprocessors.add('CFUSE_routed', CFUSERoutedPostprocessor)
+    R.calibration_targets.add('CFUSE_STREAMFLOW', CFUSEStreamflowTarget)
