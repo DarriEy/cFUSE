@@ -5,13 +5,13 @@
 cFUSE Model Postprocessor.
 
 Extracts and processes cFUSE model output for analysis and visualization.
-Uses StandardModelPostprocessor for minimal boilerplate.
+Uses StandardModelPostProcessor for minimal boilerplate.
 """
 
-from symfluence.models.base.standard_postprocessor import StandardModelPostprocessor
+from symfluence.models.base.standard_postprocessor import StandardModelPostProcessor
 
 
-class CFUSEPostprocessor(StandardModelPostprocessor):
+class CFUSEPostProcessor(StandardModelPostProcessor):
     """
     Postprocessor for cFUSE model output.
 
@@ -67,7 +67,7 @@ class CFUSEPostprocessor(StandardModelPostprocessor):
         return nc_file
 
 
-class CFUSERoutedPostprocessor(StandardModelPostprocessor):
+class CFUSERoutedPostProcessor(StandardModelPostProcessor):
     """
     Postprocessor for routed cFUSE output (via external routing).
 

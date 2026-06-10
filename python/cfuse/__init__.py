@@ -105,7 +105,7 @@ def register():
     from .extractor import CFUSEResultExtractor
     from .runner import CFUSERunner
     from .preprocessor import CFUSEPreProcessor
-    from .postprocessor import CFUSEPostprocessor, CFUSERoutedPostprocessor
+    from .postprocessor import CFUSEPostProcessor, CFUSERoutedPostProcessor
     from .calibration.optimizer import CFUSEModelOptimizer
     from .calibration.worker import CFUSEWorker
     from .calibration.parameter_manager import CFUSEParameterManager
@@ -121,12 +121,12 @@ def register():
         runner=CFUSERunner,
         runner_method='run_cfuse',
         preprocessor=CFUSEPreProcessor,
-        postprocessor=CFUSEPostprocessor,
+        postprocessor=CFUSEPostProcessor,
         worker=CFUSEWorker,
         optimizer=CFUSEModelOptimizer,
         parameter_manager=CFUSEParameterManager,
     )
 
     # Components without a dedicated manifest parameter.
-    R.postprocessors.add('CFUSE_routed', CFUSERoutedPostprocessor)
+    R.postprocessors.add('CFUSE_routed', CFUSERoutedPostProcessor)
     R.calibration_targets.add('CFUSE_STREAMFLOW', CFUSEStreamflowTarget)
