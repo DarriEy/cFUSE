@@ -42,6 +42,7 @@
  
  #include <cmath>
  #include <algorithm>
+ #include <limits>
  #include <memory>
  #include <stdexcept>
  
@@ -473,7 +474,9 @@
          Real* J
      ) {
          const int n = get_num_states(config);
-         const Real eps = 1e-7;
+         // sqrt(machine epsilon) keeps the forward-difference step well above
+         // rounding noise in both float and double builds
+         const Real eps = std::sqrt(std::numeric_limits<Real>::epsilon());
 
          Real f0[MAX_TOTAL_STATES];
          Real f1[MAX_TOTAL_STATES];

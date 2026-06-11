@@ -33,7 +33,7 @@ if(DFUSE_USE_CUDA)
 endif()
 
 # Optimization flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CUDA_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # ============================================================================

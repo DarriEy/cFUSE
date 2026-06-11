@@ -65,11 +65,11 @@ jobs:
 
     - name: Test imports
       run: |
-        python -c "from dfuse import __version__; print(f'dFUSE version: {__version__}')"
-        python -c "from dfuse import VIC_CONFIG, TOPMODEL_CONFIG, PARAM_NAMES"
-        python -c "from dfuse.config import FUSEConfig, get_default_params_array"
-        python -c "import numpy as np; from dfuse.config import get_default_params_array; p = get_default_params_array(); print(f'Default params shape: {p.shape}')"
+        python -c "from cfuse import __version__; print(f'cFUSE version: {__version__}')"
+        python -c "from cfuse import VIC_CONFIG, TOPMODEL_CONFIG, PARAM_NAMES"
+        python -c "from cfuse.config import FUSEConfig, get_default_params_array"
+        python -c "import numpy as np; from cfuse.config import get_default_params_array; p = get_default_params_array(); print(f'Default params shape: {p.shape}')"
 
     - name: Test config
       run: |
-        python -c "from dfuse import FUSEConfig, VIC_CONFIG; d = VIC_CONFIG.to_dict(); assert 'upper_arch' in d; assert 'baseflow' in d; print('Config tests passed!')"
+        python -c "from cfuse import FUSEConfig, VIC_CONFIG; d = VIC_CONFIG.to_dict(); assert 'upper_arch' in d; assert 'baseflow' in d; print('Config tests passed!')"
