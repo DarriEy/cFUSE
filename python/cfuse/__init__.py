@@ -9,7 +9,7 @@ Example usage:
     from cfuse.io import read_fuse_forcing, read_elevation_bands
 """
 
-__version__ = "0.4.1"
+__version__ = "0.6.0"
 
 # Import core configuration
 from .config import (
