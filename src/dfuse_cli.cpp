@@ -753,7 +753,7 @@ Parameters fortran_to_cfuse_params(const FortranParams& fp) {
      }
      
      try {
-        std::cout << "cFUSE v0.2.9\n";
+        std::cout << "cFUSE v0.6.1\n";
          std::cout << std::string(60, '=') << "\n";
          
          // Parse file manager
@@ -951,16 +951,20 @@ Parameters fortran_to_cfuse_params(const FortranParams& fp) {
              std::cout << "\nOutput saved (lumped): " << output_file << "\n";
          }
          
-         // Compute metrics if observed data available
+         // Compute metrics if observed data available. Guard against an empty
+         // q_obs vector (non-NetCDF forcing path leaves it unfilled) which would
+         // otherwise index out of bounds below.
          size_t n_valid = 0;
          Real ss_res = 0, ss_tot = 0, q_obs_mean = 0;
-         for (size_t i = 0; i < n_timesteps; ++i) {
-             if (!std::isnan(forcing.q_obs[i]) && forcing.q_obs[i] > -9000) {
-                 q_obs_mean += forcing.q_obs[i];
-                 n_valid++;
+         if (forcing.q_obs.size() >= n_timesteps) {
+             for (size_t i = 0; i < n_timesteps; ++i) {
+                 if (!std::isnan(forcing.q_obs[i]) && forcing.q_obs[i] > -9000) {
+                     q_obs_mean += forcing.q_obs[i];
+                     n_valid++;
+                 }
              }
          }
-         
+
          if (n_valid > 0) {
              q_obs_mean /= n_valid;
              for (size_t i = 0; i < n_timesteps; ++i) {
@@ -969,9 +973,15 @@ Parameters fortran_to_cfuse_params(const FortranParams& fp) {
                      ss_tot += (forcing.q_obs[i] - q_obs_mean) * (forcing.q_obs[i] - q_obs_mean);
                  }
              }
-             Real nse = 1.0 - ss_res / ss_tot;
-             std::cout << "\nPerformance vs observed:\n";
-             std::cout << "  NSE: " << nse << "\n";
+             // ss_tot == 0 means observations are constant; NSE is undefined.
+             if (ss_tot > Real(0)) {
+                 Real nse = 1.0 - ss_res / ss_tot;
+                 std::cout << "\nPerformance vs observed:\n";
+                 std::cout << "  NSE: " << nse << "\n";
+             } else {
+                 std::cout << "\nPerformance vs observed: NSE undefined "
+                              "(observations are constant)\n";
+             }
          }
          
          std::cout << "\n" << std::string(60, '=') << "\n";

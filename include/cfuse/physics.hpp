@@ -338,12 +338,12 @@
      Real& e1, Real& e2
  ) {
      // Upper layer evap (3a)
-     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / params.S1_T_max;
+     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / smooth_max(params.S1_T_max, Real(1e-6));
      e1 = pet * S1_T_frac;
      
      // Lower layer evap (3b) - from residual demand
      Real residual_pet = pet - e1;
-     Real S2_T_frac = smooth_min(state.S2_T, params.S2_T_max) / params.S2_T_max;
+     Real S2_T_frac = smooth_min(state.S2_T, params.S2_T_max) / smooth_max(params.S2_T_max, Real(1e-6));
      e2 = residual_pet * S2_T_frac;
  }
  
@@ -359,11 +359,11 @@
      Real r2 = Real(1) - params.r1;
      
      // Upper layer (3c)
-     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / params.S1_T_max;
+     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / smooth_max(params.S1_T_max, Real(1e-6));
      e1 = pet * params.r1 * S1_T_frac;
      
      // Lower layer (3d)
-     Real S2_T_frac = smooth_min(state.S2_T, params.S2_T_max) / params.S2_T_max;
+     Real S2_T_frac = smooth_min(state.S2_T, params.S2_T_max) / smooth_max(params.S2_T_max, Real(1e-6));
      e2 = pet * r2 * S2_T_frac;
  }
  
@@ -388,7 +388,35 @@
          e2 = Real(0);
      }
  }
- 
+
+ /**
+  * @brief Split total upper-layer evaporation (flux.e1) into the primary and
+  *        secondary tension stores for the TENSION2_FREE upper architecture.
+  *
+  * For TENSION2_FREE, compute_derivatives reads flux.e1_A/e1_B (not flux.e1),
+  * so this MUST be called after compute_evaporation for any solver/kernel path
+  * that uses that architecture. The split is proportional to each store's
+  * contents, smoothly blending to an even split as the total tension storage
+  * approaches zero (branch-free for AD compatibility). For all other upper
+  * architectures it routes all evap to e1_A (e1_B = 0).
+  */
+ DFUSE_HOST_DEVICE inline void split_tension_evap(
+     const State& state, const ModelConfig& config, Flux& flux
+ ) {
+     if (config.upper_arch == UpperLayerArch::TENSION2_FREE) {
+         Real total_tension = state.S1_TA + state.S1_TB;
+         Real safe_total = smooth_max(total_tension, Real(1e-6));
+         Real blend = smooth_sigmoid(total_tension - Real(1e-5), Real(1e-6));
+         Real frac_A = state.S1_TA / safe_total;
+         Real frac_B = state.S1_TB / safe_total;
+         flux.e1_A = flux.e1 * (blend * frac_A + (Real(1) - blend) * Real(0.5));
+         flux.e1_B = flux.e1 * (blend * frac_B + (Real(1) - blend) * Real(0.5));
+     } else {
+         flux.e1_A = flux.e1;
+         flux.e1_B = Real(0);
+     }
+ }
+
  // ============================================================================
  // PERCOLATION PARAMETERIZATIONS
  // ============================================================================
@@ -441,8 +469,22 @@
  }
  
  /**
+  * @brief Source ("q0") rate for lower-zone-demand percolation.
+  *
+  * For NONLINEAR baseflow the saturated conductivity `ks` sets the base rate;
+  * otherwise the current baseflow `qb` does. Shared by the forward kernel and
+  * all ODE-solver flux routines so the differentiable path and the solver path
+  * compute identical percolation. (Ignored for non-LOWER_DEMAND percolation.)
+  */
+ DFUSE_HOST_DEVICE inline Real percolation_source(
+     const ModelConfig& config, const Parameters& params, Real qb
+ ) {
+     return (config.baseflow == BaseflowType::NONLINEAR) ? params.ks : qb;
+ }
+
+ /**
   * @brief Dispatch percolation based on configuration
-  * 
+  *
   * Note: For SINGLE_STATE upper layer architecture with FREE_STORAGE percolation,
   * percolation is zero because there's no separate free storage in onestate_1.
   * This matches Fortran FUSE behavior.
@@ -603,7 +645,7 @@
  DFUSE_HOST_DEVICE inline Real satarea_linear(
      const State& state, const Parameters& params
  ) {
-     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / params.S1_T_max;
+     Real S1_T_frac = smooth_min(state.S1_T, params.S1_T_max) / smooth_max(params.S1_T_max, Real(1e-6));
      return S1_T_frac * params.Ac_max;
  }
  
@@ -824,8 +866,12 @@
      
      // Snow derivative
      if (config.enable_snow) {
-         // dSWE/dt handled separately in snow module
-         // Not included in dSdt as it uses its own update
+         // SWE is integrated separately by the snow module (operator splitting),
+         // so within this system its derivative is zero. We must still WRITE the
+         // slot: get_num_states() counts SWE as a state and the implicit/explicit
+         // Euler solvers integrate dSdt over [0, n_states). Leaving it unwritten
+         // fed an indeterminate value into the Newton step and corrupted SWE.
+         dSdt[idx++] = Real(0);
      }
  }
  

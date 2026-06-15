@@ -137,13 +137,13 @@ class FortranParameters:
         12: ks, 13: n, 14: v, 15: v_A, 16: v_B,
         17: Ac_max, 18: b, 19: lambda, 20: chi, 21: mu_t,
         22: T_rain, 23: T_melt, 24: melt_rate, 25: lapse_rate, 26: opg
-        27: MFMAX, 28: MFMIN
-        
+        27: MFMAX, 28: MFMIN, 29: shape_t, 30: smooth_frac
+
         Args:
             arch2: Lower layer architecture (unlimfrc_2, unlimpow_2, fixedsiz_2, tens2pll_2)
                    For 'unlim*' architectures, S2_max is set to a large value.
         """
-        params = np.zeros(29, dtype=np.float32)
+        params = np.zeros(31, dtype=np.float32)
         
         # Storage
         params[0] = self.MAXWATR_1           # S1_max
@@ -198,7 +198,13 @@ class FortranParameters:
         params[26] = self.OPG                # opg (km-1)
         params[27] = self.MFMAX              # MFMAX (max melt factor on June 21)
         params[28] = self.MFMIN              # MFMIN (min melt factor on Dec 21)
-        
+
+        # Numerical/routing parameters with no Fortran FUSE equivalent: use the
+        # cFUSE defaults (see cfuse.config.DEFAULT_PARAMS) so the vector length
+        # matches the C++ core's NUM_PARAMETERS (31).
+        params[29] = 3.0                     # shape_t (routing gamma shape)
+        params[30] = 0.01                    # smooth_frac (smoothing fraction)
+
         return params
 
     def to_dfuse_params(self, arch2: str = 'unlimpow_2') -> np.ndarray:

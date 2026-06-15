@@ -195,40 +195,46 @@ struct State {
  * All fluxes in mm/day.
  */
 struct Flux {
+    // All members are default-initialized to zero. Several architecture/solver
+    // combinations only write a subset of these (e.g. e1_A/e1_B are set for the
+    // TENSION2_FREE upper arch), and downstream consumers (compute_derivatives,
+    // compute_totals) read them unconditionally — without these initializers
+    // those paths would read indeterminate values (NaN/garbage hazard).
+
     // Input fluxes
-    Real rain;        ///< Rainfall (after snow partition)
-    Real melt;        ///< Snowmelt
-    Real throughfall; ///< Rain + melt reaching soil
-    
+    Real rain = Real(0);        ///< Rainfall (after snow partition)
+    Real melt = Real(0);        ///< Snowmelt
+    Real throughfall = Real(0); ///< Rain + melt reaching soil
+
     // Evaporation fluxes
-    Real e1;          ///< Evaporation from upper layer
-    Real e2;          ///< Evaporation from lower layer
-    Real e1_A;        ///< Evap from primary tension store
-    Real e1_B;        ///< Evap from secondary tension store
-    Real e_total;     ///< Total actual evaporation
-    
+    Real e1 = Real(0);          ///< Evaporation from upper layer
+    Real e2 = Real(0);          ///< Evaporation from lower layer
+    Real e1_A = Real(0);        ///< Evap from primary tension store
+    Real e1_B = Real(0);        ///< Evap from secondary tension store
+    Real e_total = Real(0);     ///< Total actual evaporation
+
     // Runoff fluxes
-    Real qsx;         ///< Saturation excess surface runoff
-    Real qif;         ///< Interflow
-    Real qb;          ///< Total baseflow
-    Real qb_A;        ///< Baseflow from primary reservoir
-    Real qb_B;        ///< Baseflow from secondary reservoir
-    Real q_total;     ///< Total runoff (qsx + qif + qb)
-    
+    Real qsx = Real(0);         ///< Saturation excess surface runoff
+    Real qif = Real(0);         ///< Interflow
+    Real qb = Real(0);          ///< Total baseflow
+    Real qb_A = Real(0);        ///< Baseflow from primary reservoir
+    Real qb_B = Real(0);        ///< Baseflow from secondary reservoir
+    Real q_total = Real(0);     ///< Total runoff (qsx + qif + qb)
+
     // Internal fluxes
-    Real q12;         ///< Percolation from upper to lower
-    
+    Real q12 = Real(0);         ///< Percolation from upper to lower
+
     // Overflow fluxes
-    Real qurof;       ///< Primary tension overflow
-    Real qutof;       ///< Tension storage overflow
-    Real qufof;       ///< Free storage overflow (upper)
-    Real qstof;       ///< Lower tension overflow
-    Real qsfof;       ///< Lower free storage overflow
-    Real qsfofa;      ///< Primary baseflow overflow
-    Real qsfofb;      ///< Secondary baseflow overflow
-    
+    Real qurof = Real(0);       ///< Primary tension overflow
+    Real qutof = Real(0);       ///< Tension storage overflow
+    Real qufof = Real(0);       ///< Free storage overflow (upper)
+    Real qstof = Real(0);       ///< Lower tension overflow
+    Real qsfof = Real(0);       ///< Lower free storage overflow
+    Real qsfofa = Real(0);      ///< Primary baseflow overflow
+    Real qsfofb = Real(0);      ///< Secondary baseflow overflow
+
     // Saturated area
-    Real Ac;          ///< Saturated contributing area fraction
+    Real Ac = Real(0);          ///< Saturated contributing area fraction
     
     DFUSE_HOST_DEVICE void compute_totals() {
         e_total = e1 + e2;

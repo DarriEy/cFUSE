@@ -23,7 +23,7 @@ from typing import Optional, List, Tuple
 import json
 import argparse
 
-from cfuse import FUSEConfig, VIC_CONFIG
+from cfuse import FUSEConfig, VIC_CONFIG, PARAM_NAMES, PARAM_BOUNDS
 from cfuse.netcdf import read_fuse_forcing, parse_file_manager, read_elevation_bands
 
 # =============================================================================
@@ -99,28 +99,10 @@ class OptimizationConfig:
 # PARAMETER DEFINITIONS
 # =============================================================================
 
-PARAM_NAMES = [
-    'S1_max', 'S2_max', 'f_tens', 'f_rchr', 'f_base', 'r1',
-    'ku', 'c', 'alpha', 'psi', 'kappa', 'ki',
-    'ks', 'n', 'v', 'v_A', 'v_B',
-    'Ac_max', 'b', 'lambda', 'chi', 'mu_t',
-    'T_rain', 'T_melt', 'melt_rate', 'lapse_rate', 'opg',
-    'MFMAX', 'MFMIN'
-]
-
-PARAM_BOUNDS = {
-    'S1_max': (50.0, 5000.0), 'S2_max': (100.0, 10000.0),
-    'f_tens': (0.05, 0.95), 'f_rchr': (0.05, 0.95), 'f_base': (0.05, 0.95),
-    'r1': (0.05, 0.95), 'ku': (0.01, 1000.0), 'c': (1.0, 20.0),
-    'alpha': (1.0, 250.0), 'psi': (1.0, 5.0), 'kappa': (0.05, 0.95),
-    'ki': (0.01, 1000.0), 'ks': (0.001, 10000.0), 'n': (1.0, 10.0),
-    'v': (0.001, 0.25), 'v_A': (0.001, 0.25), 'v_B': (0.001, 0.25),
-    'Ac_max': (0.05, 0.95), 'b': (0.001, 3.0), 'lambda': (5.0, 10.0),
-    'chi': (2.0, 5.0), 'mu_t': (0.01, 5.0), 'T_rain': (-2.0, 4.0),
-    'T_melt': (-2.0, 4.0), 'melt_rate': (1.0, 10.0),
-    'lapse_rate': (-9.8, 0.0), 'opg': (0.0, 1.0),
-    'MFMAX': (1.0, 10.0), 'MFMIN': (0.0, 10.0)
-}
+# PARAM_NAMES and PARAM_BOUNDS are imported from cfuse.config (re-exported via
+# the cfuse package) so the parameter vector here always stays in sync with the
+# C++ core's NUM_PARAMETERS. Do not redefine them locally — that previously drifted
+# to 29 entries and silently dropped shape_t/smooth_frac.
 
 # Default initial parameters (physically reasonable starting point)
 DEFAULT_INIT_PARAMS = {

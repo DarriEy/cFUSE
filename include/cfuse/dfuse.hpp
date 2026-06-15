@@ -46,7 +46,7 @@
  * printf("Runoff: %.2f mm/day\n", flux.total_runoff);
  * @endcode
  * 
- * @version 0.2.0
+ * @version 0.6.1
  */
 
 #pragma once

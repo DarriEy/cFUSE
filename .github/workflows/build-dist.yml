@@ -178,6 +178,12 @@ jobs:
           name: wheel-macos-full
           path: dist/*.whl
 
+  # NOTE: Only the sdist is published. The build_wheels / build_full* jobs above
+  # validate that wheels compile on each platform, but they are produced with a
+  # plain `python -m build --wheel` (no auditwheel/delocate repair and no
+  # manylinux tag), so PyPI would reject the Linux wheels. Publishing real wheels
+  # would require cibuildwheel with manylinux + wheel repair; until then, installs
+  # build the C++ extension from the sdist (needs cmake + a C++17 toolchain).
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest

@@ -28,59 +28,6 @@ namespace routing {
 // ============================================================================
 
 /**
- * @brief Compute the incomplete gamma function using series expansion
- * 
- * gamma(a, x) = integral from 0 to x of t^(a-1) * exp(-t) dt
- */
-DFUSE_HOST_DEVICE inline Real incomplete_gamma(Real a, Real x, int max_iter = 100) {
-    if (x < Real(0) || a <= Real(0)) return Real(0);
-    if (x == Real(0)) return Real(0);
-    
-    // Use series expansion for small x
-    if (x < a + Real(1)) {
-        Real sum = Real(1) / a;
-        Real term = Real(1) / a;
-        for (int n = 1; n < max_iter; ++n) {
-            term *= x / (a + n);
-            sum += term;
-            if (std::abs(term) < Real(1e-10) * std::abs(sum)) break;
-        }
-        return std::exp(-x + a * std::log(x)) * sum;
-    }
-    
-    // Use continued fraction for large x
-    Real b = x + Real(1) - a;
-    Real c = Real(1) / Real(1e-30);
-    Real d = Real(1) / b;
-    Real h = d;
-    
-    for (int i = 1; i < max_iter; ++i) {
-        Real an = -Real(i) * (Real(i) - a);
-        b += Real(2);
-        d = an * d + b;
-        if (std::abs(d) < Real(1e-30)) d = Real(1e-30);
-        c = b + an / c;
-        if (std::abs(c) < Real(1e-30)) c = Real(1e-30);
-        d = Real(1) / d;
-        Real delta = d * c;
-        h *= delta;
-        if (std::abs(delta - Real(1)) < Real(1e-10)) break;
-    }
-    
-    // gamma(a) using Stirling for large a
-    Real log_gamma_a;
-    if (a > Real(10)) {
-        log_gamma_a = Real(0.5) * std::log(Real(2) * Real(M_PI) / a) + 
-                      a * (std::log(a + Real(1) / (Real(12) * a - Real(1) / (Real(10) * a))) - Real(1));
-    } else {
-        // Direct computation for small a
-        log_gamma_a = std::lgamma(a);
-    }
-    
-    return std::exp(log_gamma_a) - std::exp(-x + a * std::log(x) - log_gamma_a) * h;
-}
-
-/**
  * @brief Compute the regularized incomplete gamma function P(a, x)
  * 
  * P(a, x) = gamma(a, x) / Gamma(a)

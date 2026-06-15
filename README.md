@@ -18,7 +18,7 @@ A differentiable implementation of the FUSE hydrological model framework with En
 
 ```bash
 # Python dependencies
-pip install numpy torch netCDF4 tqdm matplotlib
+pip install numpy pandas xarray pydantic torch netCDF4 tqdm matplotlib symfluence
 
 # macOS: Install LLVM 19 for Enzyme
 brew install llvm@19
@@ -78,7 +78,7 @@ python optimize_basin.py --spinup-days 730         # 2-year spinup
 
 Example data is distributed as a release asset starting with `v0.4.1`.
 Download the Bow-at-Banff dataset from
-https://github.com/DarriEy/dFUSE/releases/tag/v0.4.1 and extract it so the path
+https://github.com/DarriEy/cFUSE/releases/tag/v0.4.1 and extract it so the path
 is `data/domain_Bow_at_Banff_lumped_era5/` before running examples.
 
 - **Basin**: Bow River at Banff (2210 km²)
@@ -100,7 +100,10 @@ cFUSE/
 
 ## License
 
-MIT License
+GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE).
+
+This matches the license of the original FUSE implementation
+([CH-Earth/fuse](https://github.com/CH-Earth/fuse)), from which this work derives.
 
 ## Acknowledgments
 

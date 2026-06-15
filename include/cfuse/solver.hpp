@@ -197,7 +197,7 @@
          compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
          
          // Percolation
-         Real q0 = flux.qb;
+         Real q0 = percolation_source(config, params, flux.qb);
          flux.q12 = compute_percolation(state, params, config, q0);
          
          // Interflow
@@ -205,7 +205,8 @@
          
          // Evaporation
          compute_evaporation(pet, state, params, config, flux.e1, flux.e2);
-         
+         split_tension_evap(state, config, flux);
+
          // Overflow
          Real infiltration = throughfall - flux.qsx;
          compute_overflow(infiltration, flux.q12, state, params, config,
@@ -246,7 +247,7 @@
          compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
          
          // Percolation
-         Real q0 = flux.qb;
+         Real q0 = percolation_source(config, params, flux.qb);
          flux.q12 = compute_percolation(state, params, config, q0);
          
          // Interflow
@@ -254,7 +255,8 @@
          
          // Evaporation
          compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
-         
+         split_tension_evap(state, config, flux);
+
          // Overflow
          Real infiltration = flux.throughfall - flux.qsx;
          compute_overflow(infiltration, flux.q12, state, params, config,
@@ -540,41 +542,6 @@
          }
      }
 
-     void compute_final_flux(
-         State state,
-         const Forcing& forcing,
-         const Parameters& params,
-         const ModelConfig& config,
-         Flux& flux
-     ) {
-        using namespace physics;
-
-        if (config.upper_arch == UpperLayerArch::SINGLE_STATE) {
-            Real excess = state.S1 - params.S1_T_max;
-            state.S1_F = (excess > Real(0)) ? excess : Real(0);
-        }
-
-         Real rain, melt, SWE_new;
-         compute_snow(forcing.precip, forcing.temp, state.SWE, params,
-                      rain, melt, SWE_new);
-         flux.rain = rain;
-         flux.melt = melt;
-         flux.throughfall = rain + melt;
-
-         compute_surface_runoff(flux.throughfall, state, params, config,
-                                flux.Ac, flux.qsx);
-         compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
-         flux.q12 = compute_percolation(state, params, config, flux.qb);
-         flux.qif = compute_interflow(state, params, config);
-         compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
-
-         Real infiltration = flux.throughfall - flux.qsx;
-         compute_overflow(infiltration, flux.q12, state, params, config,
-                          flux.qurof, flux.qutof, flux.qufof,
-                          flux.qstof, flux.qsfof, flux.qsfofa, flux.qsfofb);
-         flux.compute_totals();
-     }
-
      // Version of compute_final_flux that uses pre-computed throughfall
      // (for implicit Euler where snow is computed once at the start of timestep)
      void compute_final_flux_with_throughfall(
@@ -598,9 +565,11 @@
          compute_surface_runoff(flux.throughfall, state, params, config,
                                 flux.Ac, flux.qsx);
          compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
-         flux.q12 = compute_percolation(state, params, config, flux.qb);
+         flux.q12 = compute_percolation(state, params, config,
+                                        percolation_source(config, params, flux.qb));
          flux.qif = compute_interflow(state, params, config);
          compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
+         split_tension_evap(state, config, flux);
 
          Real infiltration = flux.throughfall - flux.qsx;
          compute_overflow(infiltration, flux.q12, state, params, config,
@@ -686,11 +655,13 @@
      compute_surface_runoff(flux.throughfall, state, *data->params, *data->config,
                             flux.Ac, flux.qsx);
      compute_baseflow(state, *data->params, *data->config, flux.qb, flux.qb_A, flux.qb_B);
-     flux.q12 = compute_percolation(state, *data->params, *data->config, flux.qb);
+     flux.q12 = compute_percolation(state, *data->params, *data->config,
+                                    percolation_source(*data->config, *data->params, flux.qb));
      flux.qif = compute_interflow(state, *data->params, *data->config);
-     compute_evaporation(data->forcing->pet, state, *data->params, *data->config, 
+     compute_evaporation(data->forcing->pet, state, *data->params, *data->config,
                          flux.e1, flux.e2);
-     
+     split_tension_evap(state, *data->config, flux);
+
      Real infiltration = flux.throughfall - flux.qsx;
      compute_overflow(infiltration, flux.q12, state, *data->params, *data->config,
                       flux.qurof, flux.qutof, flux.qufof,
@@ -894,10 +865,12 @@
          compute_surface_runoff(flux.throughfall, state, params, config,
                                 flux.Ac, flux.qsx);
          compute_baseflow(state, params, config, flux.qb, flux.qb_A, flux.qb_B);
-         flux.q12 = compute_percolation(state, params, config, flux.qb);
+         flux.q12 = compute_percolation(state, params, config,
+                                        percolation_source(config, params, flux.qb));
          flux.qif = compute_interflow(state, params, config);
          compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
-         
+         split_tension_evap(state, config, flux);
+
          Real infiltration = flux.throughfall - flux.qsx;
          compute_overflow(infiltration, flux.q12, state, params, config,
                           flux.qurof, flux.qutof, flux.qufof,

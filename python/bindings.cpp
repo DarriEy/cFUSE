@@ -84,6 +84,14 @@
  
 Parameters params_from_numpy(py::array_t<Real> arr) {
     auto buf = arr.unchecked<1>();
+    // Reject short parameter vectors loudly. Previously a too-short array was
+    // silently zero/garbage-padded, so missing trailing params (e.g. shape_t,
+    // smooth_frac) defaulted to struct values without any warning.
+    if (arr.size() < NUM_PARAMETERS) {
+        throw std::invalid_argument(
+            "parameter vector has " + std::to_string(arr.size()) +
+            " entries but " + std::to_string(NUM_PARAMETERS) + " are required");
+    }
     Real param_arr[NUM_PARAMETERS];
     for (ssize_t i = 0; i < arr.size() && i < NUM_PARAMETERS; ++i) param_arr[i] = buf(i);
     Parameters params;
@@ -218,6 +226,15 @@ py::array_t<Real> route_runoff_timeseries(
      int n_states_in = static_cast<int>(states_buf.shape(1));
      bool shared_forcing = (forcing.ndim() == 2);
      bool shared_params = (params.ndim() == 1);
+     // Validate the parameter dimension before the unchecked reads below; a
+     // too-short vector would otherwise read out of bounds (the loops index
+     // [0, NUM_PARAMETERS) unconditionally).
+     ssize_t n_params_in = params.shape(params.ndim() - 1);
+     if (n_params_in < NUM_PARAMETERS) {
+         throw std::invalid_argument(
+             "parameter vector has " + std::to_string(n_params_in) +
+             " entries but " + std::to_string(NUM_PARAMETERS) + " are required");
+     }
      int n_timesteps;
      if (shared_forcing) n_timesteps = static_cast<int>(forcing.unchecked<2>().shape(0));
      else n_timesteps = static_cast<int>(forcing.unchecked<3>().shape(0));
@@ -748,7 +765,7 @@ PYBIND11_MODULE(cfuse_core, m) {
     m.attr("NUM_STATE_VARS") = enzyme::NUM_STATE_VARS;
     m.attr("NUM_PARAM_VARS") = enzyme::NUM_PARAM_VARS;
     m.attr("MAX_BANDS") = enzyme::MAX_BANDS;
-    m.attr("__version__") = "0.4.1";
+    m.attr("__version__") = "0.6.1";
     
     m.attr("HAS_CUDA") = 
     #ifdef DFUSE_USE_CUDA

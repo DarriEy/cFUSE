@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(cfuse LANGUAGES CXX)
+project(cfuse VERSION 0.6.1 LANGUAGES CXX)
 
 # Enable CUDA only if requested and available
 option(DFUSE_USE_CUDA "Enable CUDA support" OFF)
@@ -642,7 +642,7 @@ install(EXPORT cfuse-targets
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cfuse-config-version.cmake"
-    VERSION 0.4.1
+    VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
@@ -657,7 +657,7 @@ install(FILES
 
 message(STATUS "")
 message(STATUS "cFUSE Configuration:")
-message(STATUS "  Version:        0.4.1")
+message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  Precision:      ${DFUSE_USE_DOUBLE}")
 message(STATUS "  CUDA:           ${DFUSE_USE_CUDA}")
 message(STATUS "  Enzyme AD:      ${DFUSE_USE_ENZYME}")

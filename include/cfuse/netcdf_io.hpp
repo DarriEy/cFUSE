@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -50,54 +51,81 @@ public:
 #endif
 };
 
+#ifdef DFUSE_USE_NETCDF
+/**
+ * @brief Write a C-string as a text attribute using its exact length.
+ *
+ * Avoids hand-counted lengths passed to nc_put_att_text, which previously
+ * truncated long values (e.g. "Total evapotranspiration") and appended a stray
+ * NUL byte to others ("Upper layer storage").
+ */
+inline int nc_put_att_cstr(int ncid, int varid, const char* name, const char* value) {
+    return nc_put_att_text(ncid, varid, name, std::strlen(value), value);
+}
+#endif
+
 // ============================================================================
 // TIME UTILITIES
 // ============================================================================
 
+// Civil-date <-> days arithmetic (Howard Hinnant's public-domain algorithm).
+// Pure integer math in the proleptic Gregorian calendar: timezone-independent,
+// DST-free, and thread-safe — unlike mktime/gmtime which were previously mixed
+// here (local-time vs UTC) and produced a timezone-dependent offset.
+
+/// Days from 1970-01-01 to the given civil date.
+inline long days_from_civil(int y, unsigned m, unsigned d) {
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(y - era * 400);
+    const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097L + static_cast<long>(doe) - 719468;
+}
+
+/// Civil date for the given number of days since 1970-01-01.
+inline void civil_from_days(long z, int& y, unsigned& m, unsigned& d) {
+    z += 719468;
+    const int era = static_cast<int>((z >= 0 ? z : z - 146096) / 146097);
+    const unsigned doe = static_cast<unsigned>(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    y = static_cast<int>(yoe) + era * 400;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    d = doy - (153 * mp + 2) / 5 + 1;
+    m = mp + (mp < 10 ? 3 : -9);
+    y += (m <= 2);
+}
+
 /**
- * @brief Convert days since reference to datetime string
+ * @brief Convert days since reference to datetime string (UTC, calendar-exact)
  */
 inline std::string days_to_datetime(double days, int ref_year = 1970, int ref_month = 1, int ref_day = 1) {
-    // Simple conversion - days since reference date
-    time_t ref_time = 0;
-    struct tm ref_tm = {};
-    ref_tm.tm_year = ref_year - 1900;
-    ref_tm.tm_mon = ref_month - 1;
-    ref_tm.tm_mday = ref_day;
-    ref_time = mktime(&ref_tm);
-    
-    time_t target_time = ref_time + static_cast<time_t>(days * 86400);
-    struct tm* target_tm = gmtime(&target_time);
-    
+    long offset = static_cast<long>(days < 0 ? days - 0.5 : days + 0.5);  // round to nearest day
+    long total = days_from_civil(ref_year, static_cast<unsigned>(ref_month),
+                                 static_cast<unsigned>(ref_day)) + offset;
+    int y; unsigned m, d;
+    civil_from_days(total, y, m, d);
+
     std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(4) << (target_tm->tm_year + 1900) << "-"
-        << std::setw(2) << (target_tm->tm_mon + 1) << "-"
-        << std::setw(2) << target_tm->tm_mday;
+    oss << std::setfill('0') << std::setw(4) << y << "-"
+        << std::setw(2) << m << "-"
+        << std::setw(2) << d;
     return oss.str();
 }
 
 /**
- * @brief Parse datetime string to days since reference
+ * @brief Parse datetime string to days since reference (calendar-exact)
  */
 inline double datetime_to_days(const std::string& datetime, int ref_year = 1970, int ref_month = 1, int ref_day = 1) {
     int year, month, day;
     char sep1, sep2;
     std::istringstream iss(datetime);
     iss >> year >> sep1 >> month >> sep2 >> day;
-    
-    struct tm ref_tm = {};
-    ref_tm.tm_year = ref_year - 1900;
-    ref_tm.tm_mon = ref_month - 1;
-    ref_tm.tm_mday = ref_day;
-    time_t ref_time = mktime(&ref_tm);
-    
-    struct tm target_tm = {};
-    target_tm.tm_year = year - 1900;
-    target_tm.tm_mon = month - 1;
-    target_tm.tm_mday = day;
-    time_t target_time = mktime(&target_tm);
-    
-    return difftime(target_time, ref_time) / 86400.0;
+
+    long target = days_from_civil(year, static_cast<unsigned>(month), static_cast<unsigned>(day));
+    long ref = days_from_civil(ref_year, static_cast<unsigned>(ref_month), static_cast<unsigned>(ref_day));
+    return static_cast<double>(target - ref);
 }
 
 // ============================================================================
@@ -480,22 +508,22 @@ inline void write_output_netcdf(const std::string& filename, const OutputData& d
     
     // Add attributes
     nc_put_att_text(ncid, time_varid, "units", time_units.length(), time_units.c_str());
-    nc_put_att_text(ncid, s1_varid, "units", 2, "mm");
-    nc_put_att_text(ncid, s2_varid, "units", 2, "mm");
-    nc_put_att_text(ncid, swe_varid, "units", 2, "mm");
-    nc_put_att_text(ncid, q_varid, "units", 6, "mm/day");
-    nc_put_att_text(ncid, qsx_varid, "units", 6, "mm/day");
-    nc_put_att_text(ncid, et_varid, "units", 6, "mm/day");
-    
-    nc_put_att_text(ncid, s1_varid, "long_name", 20, "Upper layer storage");
-    nc_put_att_text(ncid, s2_varid, "long_name", 20, "Lower layer storage");
-    nc_put_att_text(ncid, q_varid, "long_name", 12, "Total runoff");
-    nc_put_att_text(ncid, et_varid, "long_name", 20, "Total evapotranspiration");
-    
+    nc_put_att_cstr(ncid, s1_varid, "units", "mm");
+    nc_put_att_cstr(ncid, s2_varid, "units", "mm");
+    nc_put_att_cstr(ncid, swe_varid, "units", "mm");
+    nc_put_att_cstr(ncid, q_varid, "units", "mm/day");
+    nc_put_att_cstr(ncid, qsx_varid, "units", "mm/day");
+    nc_put_att_cstr(ncid, et_varid, "units", "mm/day");
+
+    nc_put_att_cstr(ncid, s1_varid, "long_name", "Upper layer storage");
+    nc_put_att_cstr(ncid, s2_varid, "long_name", "Lower layer storage");
+    nc_put_att_cstr(ncid, q_varid, "long_name", "Total runoff");
+    nc_put_att_cstr(ncid, et_varid, "long_name", "Total evapotranspiration");
+
     // Global attributes
-    nc_put_att_text(ncid, NC_GLOBAL, "Conventions", 6, "CF-1.6");
-    nc_put_att_text(ncid, NC_GLOBAL, "source", 5, "cFUSE");
-    nc_put_att_text(ncid, NC_GLOBAL, "version", 5, "0.2.0");
+    nc_put_att_cstr(ncid, NC_GLOBAL, "Conventions", "CF-1.6");
+    nc_put_att_cstr(ncid, NC_GLOBAL, "source", "cFUSE");
+    nc_put_att_cstr(ncid, NC_GLOBAL, "version", "0.6.1");
     if (!data.model_config.empty()) {
         nc_put_att_text(ncid, NC_GLOBAL, "model_config", data.model_config.length(), 
                         data.model_config.c_str());

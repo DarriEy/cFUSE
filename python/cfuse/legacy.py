@@ -229,7 +229,7 @@ PARAM_BOUNDS = {
     'T_rain': (-2.0, 4.0),
     'T_melt': (-2.0, 4.0),
     'melt_rate': (1.0, 10.0),
-    'lapse_rate': (-7.0, -4.0),
+    'lapse_rate': (-9.8, 0.0),  # match cfuse.config.PARAM_BOUNDS (dry adiabatic .. 0)
     'opg': (0.0, 1.0)
 }
 
@@ -808,8 +808,9 @@ def _run_fuse_python(initial_state, forcing, params, config_dict, dt):
     ks = params[12]
     n = params[13]
     b = params[18]
-    T_rain = params[22]
-    melt_rate = params[23]
+    T_rain = params[22]      # rain/snow partition threshold
+    T_melt = params[23]      # base temperature for melt onset
+    melt_rate = params[24]   # degree-day melt factor (matches C++ Parameters layout)
     
     # Initialize state
     S1 = initial_state[0]
@@ -827,7 +828,7 @@ def _run_fuse_python(initial_state, forcing, params, config_dict, dt):
         snow_frac = 1.0 / (1.0 + np.exp(temp - T_rain))
         snow = precip * snow_frac
         rain = precip * (1.0 - snow_frac)
-        pot_melt = max(0, melt_rate * (temp - T_rain))
+        pot_melt = max(0, melt_rate * (temp - T_melt))
         SWE_after = SWE + snow
         melt = min(pot_melt, SWE_after)
         SWE = max(0, SWE_after - melt)

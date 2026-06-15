@@ -76,8 +76,7 @@
      // ========================================================================
      // 5. PERCOLATION
      // ========================================================================
-     Real q0 = (config.baseflow == BaseflowType::NONLINEAR) ? 
-               params.ks : flux.qb;
+     Real q0 = percolation_source(config, params, flux.qb);
      flux.q12 = compute_percolation(state, params, config, q0);
      
      // ========================================================================
@@ -89,21 +88,7 @@
      // 7. EVAPORATION
      // ========================================================================
      compute_evaporation(forcing.pet, state, params, config, flux.e1, flux.e2);
-     
-     if (config.upper_arch == UpperLayerArch::TENSION2_FREE) {
-         Real total_tension = state.S1_TA + state.S1_TB;
-         // Branch-free safe division for AD compatibility
-         Real safe_total = smooth_max(total_tension, Real(1e-6));
-         // Blend: proportional split when total_tension is large, equal split when near zero
-         Real blend = smooth_sigmoid(total_tension - Real(1e-5), Real(1e-6));
-         Real frac_A = state.S1_TA / safe_total;
-         Real frac_B = state.S1_TB / safe_total;
-         flux.e1_A = flux.e1 * (blend * frac_A + (Real(1) - blend) * Real(0.5));
-         flux.e1_B = flux.e1 * (blend * frac_B + (Real(1) - blend) * Real(0.5));
-     } else {
-         flux.e1_A = flux.e1;
-         flux.e1_B = Real(0);
-     }
+     split_tension_evap(state, config, flux);
      
      // ========================================================================
      // 8. OVERFLOW FLUXES

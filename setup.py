@@ -73,7 +73,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name="cfuse",
-    version="0.4.1",
+    version="0.6.1",
     packages=find_packages(where="python"),
     package_dir={"": "python"},
     ext_modules=[CMakeExtension("cfuse_core")],
