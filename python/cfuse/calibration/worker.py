@@ -576,6 +576,15 @@ class CFUSEWorker(InMemoryModelWorker):
             elif len(runoff) > len(obs):
                 runoff = runoff[:len(obs)]
 
+            # Restrict to the calibration period. Without this the loss also
+            # spans the held-out evaluation period, so a gradient optimizer
+            # trains on data the split-sample test reports as unseen.
+            cal_slice = self.get_calibration_slice()
+            if cal_slice is not None:
+                start, end = cal_slice
+                runoff = runoff[start:end]
+                obs = obs[start:end]
+
             # Compute loss
             if metric.lower() == 'nse':
                 loss = self._nse_loss(obs, runoff)
@@ -698,6 +707,13 @@ class CFUSEWorker(InMemoryModelWorker):
             min_len = min(len(runoff), len(obs))
             sim = runoff[:min_len]
             obs_arr = obs[:min_len]
+
+            # Same calibration window as the gradient path above.
+            cal_slice = self.get_calibration_slice()
+            if cal_slice is not None:
+                start, end = cal_slice
+                sim = sim[start:end]
+                obs_arr = obs_arr[start:end]
 
             valid_mask = ~(np.isnan(sim) | np.isnan(obs_arr))
             sim = sim[valid_mask]
